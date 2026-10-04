@@ -10,7 +10,7 @@ Guidance:
     WaypointTimeoutToleranceScale: 2.0 # multiplier on arrival tolerance checked when a waypoint timeout fires
 
 Navigation:
-  Interface: optitrack
+  Interface: simulated # simulated or optitrak
   Rate: 25 # Hz
   RigidBodyName: ABV1
   MaxDeadReckonDuration: 0.5 # seconds - EKF free-run bound before output is frozen and marked invalid
@@ -69,7 +69,7 @@ Control:
     Inertia: 0.3 # kg-m^2
     ThrusterForce: 0.1 # N
     MomentArm: 0.1235 # m
-    PropagationMode: external # "internal" (self-integrate) | "external" (Gazebo-sourced, via abv/sim/gazebo_state)
+    PropagationMode: internal # "internal" (self-integrate) | "external" (Gazebo-sourced, via abv/sim/gazebo_state)
     ExternalStateTopic: abv/sim/gazebo_state # abv_msgs/AbvState, published by abv_bridge's GazeboStateConvertor
     WrenchCommandTopic: gazebo/wrench_cmd # geometry_msgs/WrenchStamped, consumed by ptera_sim's WrenchApplicator
     WrenchTargetLink: base_link # stamped as the wrench's frame_id
