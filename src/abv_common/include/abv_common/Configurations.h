@@ -6,6 +6,7 @@
 #include <eigen3/Eigen/Dense>
 #include <yaml-cpp/yaml.h>
 #include <plog/Log.h>
+#include "abv_common/DockingConfig.h"
 
 struct VehicleConfig 
 {
