@@ -61,17 +61,26 @@ struct TableViewConfig
     double mRobotLength; // meters
 };
 
+struct SceneConfig
+{
+    // meters - the 2D region (world frame, same convention as AbvVec3/AbvState)
+    // the ABV must remain within. Consumed by abv_guidance's Scene for
+    // table-bounds containment checks.
+    double mXMin;
+    double mXMax;
+    double mYMin;
+    double mYMax;
+};
+
+struct CollisionAvoidConfig
+{
+    double mGridResolution; // meters/cell for CollisionAvoidPathGenerator's A* search grid
+    double mReplanRate;     // Hz - background re-solve rate
+};
+
 struct ControlConfig
 {
     int mStateMachineRate;
-
-    // which IControlPolicy implementation Vehicle should instantiate: "PID" or "External"
-    std::string mControlPolicyType;
-
-    // PID controller gains
-    Eigen::Vector3d mKp;
-    Eigen::Vector3d mKi;
-    Eigen::Vector3d mKd;
 
     // Controller arrival
     Eigen::Vector3d mPoseArrivalTol;
@@ -81,6 +90,36 @@ struct ControlConfig
     // before nav data is considered stale (catches full topic/node dropout).
     double mNavDataTimeout;
 
+    double mForce;
+    double mMomentArm;
+    // Vehicle dynamics (used by the simulator)
+    double mMass;
+    double mInertia;
+
+    // true iff Dynamics.PropagationMode is "external": abv_simulator publishes
+    // a net body wrench and sources state (for damping + the nav/Optitrack
+    // publish path) from Gazebo instead of integrating locally.
+    bool mUseExternalPropagation;
+    std::string mExternalStateTopic;  // abv_msgs/AbvState, from abv_bridge's GazeboStateConvertor
+    std::string mWrenchCommandTopic;  // geometry_msgs/WrenchStamped, to ptera_sim's WrenchApplicator
+    std::string mWrenchTargetLink;    // stamped as the outgoing wrench's frame_id
+};
+
+struct ControlLawConfig
+{
+    // which IControlLaw implementation abv_control should instantiate.
+    // "PID" today; room for "LQR"/"MPC" etc. as new IControlLaw implementations
+    // are added, without needing a new node.
+    std::string mLawType;
+
+    // PID controller gains
+    Eigen::Vector3d mKp;
+    Eigen::Vector3d mKi;
+    Eigen::Vector3d mKd;
+};
+
+struct ThrusterConfig
+{
     // ThrusterCommander & ThrusterDriver configs
     std::string mThrusterDriverType;
     std::vector<int> mGpioPins;
@@ -100,17 +139,6 @@ struct ControlConfig
 
     double mForce;
     double mMomentArm;
-    // Vehicle dynamics (used by the simulator)
-    double mMass;
-    double mInertia;
-
-    // true iff Dynamics.PropagationMode is "external": abv_simulator publishes
-    // a net body wrench and sources state (for damping + the nav/Optitrack
-    // publish path) from Gazebo instead of integrating locally.
-    bool mUseExternalPropagation;
-    std::string mExternalStateTopic;  // abv_msgs/AbvState, from abv_bridge's GazeboStateConvertor
-    std::string mWrenchCommandTopic;  // geometry_msgs/WrenchStamped, to ptera_sim's WrenchApplicator
-    std::string mWrenchTargetLink;    // stamped as the outgoing wrench's frame_id
 };
 
 namespace ConfigUtils

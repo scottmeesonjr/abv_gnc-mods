@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>abv_policy_registry</name>
+  <version>1.0.0</version>
+  <description>tracks which control-policy nodes (abv_control, abv_rl-cpp, ...) are alive via abv/policy/status and arbitrates which one is active, exposing abv/policy/active, abv/policy/registry and the abv/policy/switch service</description>
+  <maintainer email="samlovelace12@gmail.com">sam</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>abv_msgs</depend>
+  <depend>abv_common</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

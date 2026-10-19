@@ -2,9 +2,11 @@
 #include "abv_guidance/FromFileGenerator.h"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <fstream>
+#include <limits>
 #include "plog/Log.h"
 
-FromFileGenerator::FromFileGenerator() : mIndex(0)
+FromFileGenerator::FromFileGenerator() :
+    mIndex(0), mPreviewLength(std::numeric_limits<std::size_t>::max())
 {
 
 }
@@ -31,6 +33,56 @@ bool FromFileGenerator::init()
     std::string line;
     while (std::getline(file, line))
     {
+        if (line.empty())
+        {
+            continue;
+        }
+
+        // Metadata/header line, e.g. "# PreviewLength: 5" - configures how
+        // many upcoming waypoints getPathPreviewLength() advertises for
+        // visualization. May appear anywhere in the file (not just the top);
+        // unrecognized keys are logged and ignored. Everything else below
+        // this block is unchanged waypoint-row parsing.
+        if (line[0] == '#')
+        {
+            std::string content = line.substr(1);
+            std::size_t colonPos = content.find(':');
+            if (colonPos == std::string::npos)
+            {
+                LOGW << "Malformed path file header line (expected 'key: value'): " << line;
+                continue;
+            }
+
+            std::string key = content.substr(0, colonPos);
+            std::string value = content.substr(colonPos + 1);
+
+            auto trim = [](std::string& s) {
+                std::size_t start = s.find_first_not_of(" \t");
+                std::size_t end = s.find_last_not_of(" \t");
+                s = (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+            };
+            trim(key);
+            trim(value);
+
+            if (key == "PreviewLength")
+            {
+                try
+                {
+                    mPreviewLength = std::stoul(value);
+                }
+                catch (const std::exception&)
+                {
+                    LOGW << "Invalid PreviewLength value in path file header: " << value;
+                }
+            }
+            else
+            {
+                LOGW << "Unrecognized path file header key: " << key;
+            }
+
+            continue;
+        }
+
         std::stringstream ss(line);
         std::string field;
         double x, y, yaw;
@@ -75,4 +127,18 @@ Waypoint FromFileGenerator::getNext()
 {
     LOGV << "Sending waypoint " << mIndex;
     return mPath.at(mIndex++);
+}
+
+std::vector<Waypoint> FromFileGenerator::getPath() const
+{
+    return std::vector<Waypoint>(mPath.begin() + mIndex, mPath.end());
+}
+
+std::size_t FromFileGenerator::getPathPreviewLength() const
+{
+    // Configured via path.csv's "# PreviewLength: N" header line (see
+    // init()); defaults to showing everything remaining. StateMachine clamps
+    // this to the actual remaining count, so no upper-bound check is needed
+    // here even for the default sentinel value.
+    return mPreviewLength;
 }

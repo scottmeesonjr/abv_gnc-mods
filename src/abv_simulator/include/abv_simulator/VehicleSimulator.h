@@ -60,7 +60,7 @@ private:
 
     // control allocation matrix: row = contribution of each of the 8
     // thrusters to (fx, fy, tz) when that thruster fires alone. Sourced from
-    // the same ControlConfig.mAllocationX/Y/Yaw fields ThrusterCommander's
+    // the same ThrusterConfig.mAllocationX/Y/Yaw fields abv_thrusters'
     // MatrixThrusterMapper uses, so sim and hardware can't drift apart.
     // Only used when mUseMatrixAllocation is true - see convertThrusterCommandToForce.
     Eigen::Matrix<double, 3, 8> mB;

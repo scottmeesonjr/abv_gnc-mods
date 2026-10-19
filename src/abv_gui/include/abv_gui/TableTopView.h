@@ -5,8 +5,20 @@
 #include <QString>
 #include <QPointF>
 #include <QRectF>
+#include <QVector>
 
 #include "abv_common/Configurations.h"
+
+// Plain world-frame (x, y, radius) obstacle, used purely for rendering the
+// persistent obstacle set - main.cpp owns the authoritative list (since it's
+// the one publishing to abv/scene/obstacles) and pushes it here via
+// setObstacles after every add/clear.
+struct PlacedObstacle
+{
+    double mX;
+    double mY;
+    double mRadius;
+};
 
 // Top-down, to-scale render of the physical table with the robot's live
 // pose: gridded table surface and a heading-aware robot glyph (square
@@ -22,13 +34,10 @@ class TableTopView : public QWidget
 public:
     explicit TableTopView(const TableViewConfig& aConfig, QWidget* parent = nullptr);
 
-    // Click-interaction mode: what a press/drag/release gesture on the table
-    // does. Only SetGoalPose is implemented today; this exists so a future
-    // mode (e.g. click-to-place a collision obstacle) can be added as a new
-    // enum value + a new branch in the mouse handlers, without touching the
-    // goal-pose code path.
-    enum class InteractionMode { SetGoalPose };
-    void setInteractionMode(InteractionMode aMode);
+    // Replaces the persistent (already-committed) obstacle set drawn on the
+    // table. This widget doesn't track obstacle state itself - the caller is
+    // the source of truth, same split as goalPoseSelected/clearGoalGhost.
+    void setObstacles(const QVector<PlacedObstacle>& aObstacles);
 
 public slots:
     // Expects a QVector<double>{x, y, yaw, valid} as produced by
@@ -39,15 +48,36 @@ public slots:
     // string, index i = thruster (i+1) (see Control.Thrusters.Allocation).
     void onThrusterState(const QVariant& aData);
 
+    // Expects a QVector<QPointF> of world-frame (x, y) points, as produced by
+    // conversions::pathConvertor - the remaining path abv_guidance is
+    // currently executing. Empty clears the drawn path.
+    void onPathUpdate(const QVariant& aData);
+
     // Hides the proposed-goal ghost. Called after the caller has resolved
     // (sent or cancelled) a goalPoseSelected signal.
     void clearGoalGhost();
 
+    // Hides the proposed-obstacle ghost. Called after the caller has resolved
+    // (added or cancelled) an obstaclePlaced signal.
+    void clearObstacleGhost();
+
 signals:
-    // Emitted on mouse release after a SetGoalPose press/drag gesture. This
-    // widget doesn't know about ROS/CommandPanel - the caller decides what
-    // "sending" a goal pose means (see main.cpp).
+    // Emitted on mouse release after a left-click-drag gesture on the table.
+    // This widget doesn't know about ROS/CommandPanel - the caller decides
+    // what "sending" a goal pose means (see main.cpp).
     void goalPoseSelected(double aX, double aY, double aYaw);
+
+    // Emitted on mouse release after a right-click-drag gesture on the table
+    // (i.e. one that actually moved - see mouseReleaseEvent/mRightDragExceededThreshold).
+    // As with goalPoseSelected, this widget doesn't know about ROS - the
+    // caller decides whether/how to publish it (see main.cpp).
+    void obstaclePlaced(double aX, double aY, double aRadius);
+
+    // Emitted when the user chooses "Clear Obstacles" from the menu shown on
+    // a plain right-click (no drag). This widget doesn't own the obstacle
+    // list - the caller (main.cpp) is the source of truth and decides how to
+    // react.
+    void clearObstaclesRequested();
 
 protected:
     void paintEvent(QPaintEvent* aEvent) override;
@@ -62,9 +92,13 @@ private:
     QPointF pixelToWorld(const QRectF& aTableRect, const QPointF& aPixel) const;
 
     void drawGrid(QPainter& aPainter, const QRectF& aTableRect) const;
+    void drawPath(QPainter& aPainter, const QRectF& aTableRect) const;
     void drawRobot(QPainter& aPainter, const QRectF& aTableRect) const;
+    void drawObstacles(QPainter& aPainter, const QRectF& aTableRect) const;
     void drawGoalGhost(QPainter& aPainter, const QRectF& aTableRect) const;
+    void drawObstacleGhost(QPainter& aPainter, const QRectF& aTableRect) const;
     void drawReadout(QPainter& aPainter) const;
+    void drawLegend(QPainter& aPainter) const;
 
     TableViewConfig mConfig;
 
@@ -75,11 +109,23 @@ private:
 
     QString mThrusterState{"00000000"};
 
-    InteractionMode mInteractionMode{InteractionMode::SetGoalPose};
     bool mDraggingGoal{false};
     bool mHasGoalGhost{false};
     double mGoalX{0.0};
     double mGoalY{0.0};
     double mGoalYaw{0.0};
     QPointF mDragStartWorld;
+
+    bool mDraggingObstacle{false};
+    bool mHasObstacleGhost{false};
+    bool mRightDragExceededThreshold{false};
+    double mObstacleX{0.0};
+    double mObstacleY{0.0};
+    double mObstacleRadius{0.0};
+
+    QVector<PlacedObstacle> mObstacles;
+
+    // World-frame (x, y) points of the remaining path abv_guidance is
+    // currently executing, from onPathUpdate.
+    QVector<QPointF> mPath;
 };

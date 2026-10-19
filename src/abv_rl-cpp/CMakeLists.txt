@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(ament_cmake  REQUIRED)
 find_package(rclcpp       REQUIRED)
 find_package(abv_msgs     REQUIRED)
+find_package(abv_common   REQUIRED)
 
 # ── ONNX Runtime ──────────────────────────────────────────────────────────────
 # Set ORT_ROOT to your local ONNX Runtime install if it isn't on the system path.
@@ -57,6 +58,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME}
     ${ORT_LIB}
+    abv_common::abv_common
 )
 
 ament_target_dependencies(${PROJECT_NAME}

@@ -40,20 +40,32 @@ VehicleSimulator::VehicleSimulator(/* args */) :
     mVelocity(Eigen::Vector2d::Zero()), mThrustForce(Eigen::Vector3d::Zero()),
     mSimulateDropoutEnabled(ConfigurationManager::getInstance()->getNavigationConfig().mSimulateDropout)
 {
-    auto config = ConfigurationManager::getInstance()->getControlConfig();
-    if(config.mAllocationX.size() != 8 || config.mAllocationY.size() != 8 || config.mAllocationYaw.size() != 8)
+    auto thrusterConfig = ConfigurationManager::getInstance()->getThrusterConfig();
+    if(thrusterConfig.mAllocationX.size() != 8 || thrusterConfig.mAllocationY.size() != 8 || thrusterConfig.mAllocationYaw.size() != 8)
     {
-        throw std::runtime_error("Control.Thrusters.Allocation rows must each have exactly 8 entries");
+        throw std::runtime_error("Thrusters.Allocation rows must each have exactly 8 entries");
     }
 
     for(int i = 0; i < 8; i++)
     {
-        mB(0, i) = config.mAllocationX[i];
-        mB(1, i) = config.mAllocationY[i];
-        mB(2, i) = config.mAllocationYaw[i];
+        mB(0, i) = thrusterConfig.mAllocationX[i];
+        mB(1, i) = thrusterConfig.mAllocationY[i];
+        mB(2, i) = thrusterConfig.mAllocationYaw[i];
     }
 
-    mUseMatrixAllocation = ("Matrix" == config.mThrusterAllocationStrategy || "matrix" == config.mThrusterAllocationStrategy);
+    mUseMatrixAllocation = ("Matrix" == thrusterConfig.mThrusterAllocationStrategy || "matrix" == thrusterConfig.mThrusterAllocationStrategy);
+
+    // Spawn inset from the table's bottom-right corner (world origin, see
+    // TableTopView's coordinate convention) by half the robot's footprint in
+    // each axis, so the whole body starts on the table rather than centered
+    // exactly on the corner with half of it hanging off the edge.
+    const TableViewConfig& tableConfig = ConfigurationManager::getInstance()->getTableViewConfig();
+    mVehicleState.x = tableConfig.mRobotLength / 2.0;
+    mVehicleState.y = tableConfig.mRobotWidth / 2.0;
+    mVehicleState.yaw = 0.0;
+    mVehicleState.vx = 0.0;
+    mVehicleState.vy = 0.0;
+    mVehicleState.omega = 0.0;
 }
 
 VehicleSimulator::~VehicleSimulator()

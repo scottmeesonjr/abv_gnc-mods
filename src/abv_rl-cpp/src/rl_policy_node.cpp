@@ -3,6 +3,13 @@
 #include <cmath>
 #include <stdexcept>
 #include <numeric>
+#include <thread>
+#include <chrono>
+
+#include "abv_common/RosTopicManager.h"
+#include "abv_common/HeartbeatPublisher.h"
+#include "abv_common/ConfigurationManager.h"
+#include "abv_msgs/msg/abv_thruster_command.hpp"
 
 // ==========================================================================
 // OnnxModel
@@ -152,35 +159,37 @@ std::array<float, 3> RLController::compute(
 // RLPolicyNode
 // ==========================================================================
 
-RLPolicyNode::RLPolicyNode() : Node("abv_rl")
+RLPolicyNode::RLPolicyNode()
 {
+    auto node = RosTopicManager::getInstance();
+
     // Declare & read parameters
-    this->declare_parameter<std::string>("model_dir",     "/home/optimus/abv_gnc/src/abv_rl-cpp/abv_rl_onnx/");
-    this->declare_parameter<int>        ("num_obstacles", 3);
-    this->declare_parameter<int>        ("num_critics",   3);
+    node->declare_parameter<std::string>("model_dir",     "/home/sam/dev/cpp/robot_ws/src/abv_gnc/src/abv_rl-cpp/abv_rl_onnx/");
+    node->declare_parameter<int>        ("num_obstacles", 3);
+    node->declare_parameter<int>        ("num_critics",   3);
 
     // Obstacle generation params
-    this->declare_parameter<int>   ("random_seed", 7);
-    this->declare_parameter<double>("x_min", -0.5);
-    this->declare_parameter<double>("x_max",  4.0);
-    this->declare_parameter<double>("y_min", -0.5);
-    this->declare_parameter<double>("y_max",  2.0);
-    this->declare_parameter<double>("obstacle_radius", 0.1);
+    node->declare_parameter<int>   ("random_seed", 7);
+    node->declare_parameter<double>("x_min", -0.5);
+    node->declare_parameter<double>("x_max",  4.0);
+    node->declare_parameter<double>("y_min", -0.5);
+    node->declare_parameter<double>("y_max",  2.0);
+    node->declare_parameter<double>("obstacle_radius", 0.1);
 
-    auto model_dir    = this->get_parameter("model_dir").as_string();
-    int  n_obs        = this->get_parameter("num_obstacles").as_int();
-    int  n_critics    = this->get_parameter("num_critics").as_int();
+    auto model_dir    = node->get_parameter("model_dir").as_string();
+    int  n_obs        = node->get_parameter("num_obstacles").as_int();
+    int  n_critics    = node->get_parameter("num_critics").as_int();
 
     controller_ = std::make_unique<RLController>(model_dir, n_obs, n_critics);
 
     // Seed-based random obstacle placement (mirrors Python logic exactly)
     {
-        int    seed     = this->get_parameter("random_seed").as_int();
-        double x_min    = this->get_parameter("x_min").as_double();
-        double x_max    = this->get_parameter("x_max").as_double();
-        double y_min    = this->get_parameter("y_min").as_double();
-        double y_max    = this->get_parameter("y_max").as_double();
-        double r        = this->get_parameter("obstacle_radius").as_double();
+        int    seed     = node->get_parameter("random_seed").as_int();
+        double x_min    = node->get_parameter("x_min").as_double();
+        double x_max    = node->get_parameter("x_max").as_double();
+        double y_min    = node->get_parameter("y_min").as_double();
+        double y_max    = node->get_parameter("y_max").as_double();
+        double r        = node->get_parameter("obstacle_radius").as_double();
 
         std::srand(static_cast<unsigned>(seed));
         std::vector<Obstacle> obstacles;
@@ -191,42 +200,55 @@ RLPolicyNode::RLPolicyNode() : Node("abv_rl")
         //    obstacles.push_back({cx, cy, static_cast<float>(r)});
         // }
         //
-        obstacles.push_back({0.957247, -0.122877, 0.1}); 
-        obstacles.push_back({2.429205, -0.318909, 0.1}); 
-        obstacles.push_back({1.911469, 0.414222, 0.1}); 
+        obstacles.push_back({0.957247, -0.122877, 0.1});
+        obstacles.push_back({2.429205, -0.318909, 0.1});
+        obstacles.push_back({1.911469, 0.414222, 0.1});
 
         controller_->set_obstacles(std::move(obstacles));
     }
 
-    service_ = this->create_service<abv_msgs::srv::AbvControlAction>(
-        "abv/control_action",
-        std::bind(&RLPolicyNode::handle_request, this,
-                  std::placeholders::_1, std::placeholders::_2)
-    );
+    node->createPublisher<abv_msgs::msg::AbvThrusterCommand>("abv/thrusters/command");
+    node->createSubscriber<abv_msgs::msg::AbvControlContext>("abv/controller/context",
+        std::bind(&RLPolicyNode::contextCallback, this, std::placeholders::_1));
+    node->createSubscriber<abv_msgs::msg::AbvPolicyActive>("abv/policy/active",
+        std::bind(&RLPolicyNode::policyActiveCallback, this, std::placeholders::_1));
 
-    RCLCPP_INFO(this->get_logger(), "RL policy node ready (ONNX runtime)");
+    RCLCPP_INFO(node->get_logger(), "RL policy node ready (ONNX runtime)");
 }
 
-void RLPolicyNode::handle_request(
-    const std::shared_ptr<abv_msgs::srv::AbvControlAction::Request>  req,
-          std::shared_ptr<abv_msgs::srv::AbvControlAction::Response> res)
+void RLPolicyNode::policyActiveCallback(abv_msgs::msg::AbvPolicyActive::SharedPtr aMsg)
 {
-    std::array<float, 3> pose     = {static_cast<float>(req->pose.x),
-                                     static_cast<float>(req->pose.y),
-                                     static_cast<float>(req->pose.yaw)};
-    std::array<float, 3> velocity = {static_cast<float>(req->vel.x),
-                                     static_cast<float>(req->vel.y),
-                                     static_cast<float>(req->vel.yaw)};
-    std::array<float, 3> error    = {static_cast<float>(req->error.x),
-                                     static_cast<float>(req->error.y),
-                                     static_cast<float>(req->error.yaw)};
+    mIsActive = (aMsg->policy_name == mPolicyName);
+}
+
+void RLPolicyNode::contextCallback(abv_msgs::msg::AbvControlContext::SharedPtr aCtxMsg)
+{
+    if(!mIsActive)
+    {
+        return;
+    }
+
+    std::array<float, 3> pose     = {static_cast<float>(aCtxMsg->pose.x),
+                                     static_cast<float>(aCtxMsg->pose.y),
+                                     static_cast<float>(aCtxMsg->pose.yaw)};
+    std::array<float, 3> velocity = {static_cast<float>(aCtxMsg->velocity.x),
+                                     static_cast<float>(aCtxMsg->velocity.y),
+                                     static_cast<float>(aCtxMsg->velocity.yaw)};
+    std::array<float, 3> error    = {static_cast<float>(aCtxMsg->error.x),
+                                     static_cast<float>(aCtxMsg->error.y),
+                                     static_cast<float>(aCtxMsg->error.yaw)};
 
     auto action = controller_->compute(pose, velocity, error);
 
-    res->action.x   = action[0];
-    res->action.y   = action[1];
-    res->action.yaw = action[2];
-    res->is_global  = false;
+    abv_msgs::msg::AbvThrusterCommand cmd;
+    cmd.type = "direction";
+    cmd.is_global = false;
+    cmd.data.x = action[0];
+    cmd.data.y = action[1];
+    cmd.data.yaw = action[2];
+    cmd.policy_name = mPolicyName;
+
+    RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvThrusterCommand>("abv/thrusters/command", cmd);
 }
 
 // ==========================================================================
@@ -234,8 +256,24 @@ void RLPolicyNode::handle_request(
 // ==========================================================================
 int main(int argc, char** argv)
 {
+    // HeartbeatPublisher reads Heartbeat.Rate from here - this node never
+    // needed abv_bringup's config.yaml before (ROS parameters only), so
+    // this load was missing; without it mRate is uninitialized and
+    // HeartbeatPublisher's timer period computation can throw.
+    ConfigurationManager::getInstance()->loadConfiguration();
+
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<RLPolicyNode>());
+    RosTopicManager::getInstance("abv_rl");
+    RosTopicManager::getInstance()->spinNode();
+    HeartbeatPublisher policyHeartbeat("rl", "abv/policy/status");
+
+    RLPolicyNode rlPolicyNode;
+
+    while(rclcpp::ok())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
     rclcpp::shutdown();
     return 0;
 }

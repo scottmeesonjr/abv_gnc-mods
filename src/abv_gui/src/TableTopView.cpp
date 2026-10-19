@@ -4,6 +4,8 @@
 #include <QPainterPath>
 #include <QFont>
 #include <QMouseEvent>
+#include <QMenu>
+#include <QCursor>
 #include <cmath>
 
 namespace
@@ -18,11 +20,13 @@ TableTopView::TableTopView(const TableViewConfig& aConfig, QWidget* parent)
     : QWidget(parent), mConfig(aConfig)
 {
     setMinimumSize(300, 200);
-}
 
-void TableTopView::setInteractionMode(InteractionMode aMode)
-{
-    mInteractionMode = aMode;
+    // Right-click can resolve to either an obstacle-placement drag or a
+    // plain click-to-clear depending on what happens before release (see
+    // mouseReleaseEvent) - handled entirely by us, so disable Qt's own
+    // native context-menu delivery to avoid it firing alongside/instead of
+    // our manual handling.
+    setContextMenuPolicy(Qt::NoContextMenu);
 }
 
 void TableTopView::onPoseUpdate(const QVariant& aData)
@@ -53,9 +57,27 @@ void TableTopView::onThrusterState(const QVariant& aData)
     update();
 }
 
+void TableTopView::onPathUpdate(const QVariant& aData)
+{
+    mPath = aData.value<QVector<QPointF>>();
+    update();
+}
+
 void TableTopView::clearGoalGhost()
 {
     mHasGoalGhost = false;
+    update();
+}
+
+void TableTopView::clearObstacleGhost()
+{
+    mHasObstacleGhost = false;
+    update();
+}
+
+void TableTopView::setObstacles(const QVector<PlacedObstacle>& aObstacles)
+{
+    mObstacles = aObstacles;
     update();
 }
 
@@ -129,42 +151,71 @@ void TableTopView::paintEvent(QPaintEvent*)
     p.setBrush(Qt::NoBrush);
     p.drawRect(tableRect);
 
+    drawPath(p, tableRect);
+
     if (mHasPose)
     {
         drawRobot(p, tableRect);
     }
+
+    drawObstacles(p, tableRect);
 
     if (mHasGoalGhost)
     {
         drawGoalGhost(p, tableRect);
     }
 
+    if (mHasObstacleGhost)
+    {
+        drawObstacleGhost(p, tableRect);
+    }
+
     drawReadout(p);
+    drawLegend(p);
 }
 
 void TableTopView::mousePressEvent(QMouseEvent* aEvent)
 {
     QRectF tableRect = tableToWidget();
-    if (mInteractionMode != InteractionMode::SetGoalPose ||
-        !tableRect.isValid() || !tableRect.contains(aEvent->pos()))
+    if (!tableRect.isValid() || !tableRect.contains(aEvent->pos()))
     {
         QWidget::mousePressEvent(aEvent);
         return;
     }
 
     QPointF world = pixelToWorld(tableRect, aEvent->pos());
-    mDragStartWorld = world;
-    mGoalX = world.x();
-    mGoalY = world.y();
-    mGoalYaw = 0.0;
-    mDraggingGoal = true;
-    mHasGoalGhost = true;
+
+    if (aEvent->button() == Qt::LeftButton)
+    {
+        mDragStartWorld = world;
+        mGoalX = world.x();
+        mGoalY = world.y();
+        mGoalYaw = 0.0;
+        mDraggingGoal = true;
+        mHasGoalGhost = true;
+    }
+    else if (aEvent->button() == Qt::RightButton)
+    {
+        // Don't show the obstacle ghost yet - a plain click (no drag) means
+        // "clear obstacles" instead, decided on release (see mouseReleaseEvent).
+        mObstacleX = world.x();
+        mObstacleY = world.y();
+        mObstacleRadius = 0.0;
+        mDraggingObstacle = true;
+        mRightDragExceededThreshold = false;
+    }
+    else
+    {
+        QWidget::mousePressEvent(aEvent);
+        return;
+    }
+
     update();
 }
 
 void TableTopView::mouseMoveEvent(QMouseEvent* aEvent)
 {
-    if (!mDraggingGoal)
+    if (!mDraggingGoal && !mDraggingObstacle)
     {
         QWidget::mouseMoveEvent(aEvent);
         return;
@@ -173,11 +224,24 @@ void TableTopView::mouseMoveEvent(QMouseEvent* aEvent)
     QRectF tableRect = tableToWidget();
     QPointF world = pixelToWorld(tableRect, aEvent->pos());
 
-    double dx = world.x() - mDragStartWorld.x();
-    double dy = world.y() - mDragStartWorld.y();
-    if (std::hypot(dx, dy) * worldScale(tableRect) >= kMinDragPixels)
+    if (mDraggingGoal)
     {
-        mGoalYaw = std::atan2(dy, dx);
+        double dx = world.x() - mDragStartWorld.x();
+        double dy = world.y() - mDragStartWorld.y();
+        if (std::hypot(dx, dy) * worldScale(tableRect) >= kMinDragPixels)
+        {
+            mGoalYaw = std::atan2(dy, dx);
+        }
+    }
+    else if (mDraggingObstacle)
+    {
+        double radius = std::hypot(world.x() - mObstacleX, world.y() - mObstacleY);
+        if (radius * worldScale(tableRect) >= kMinDragPixels)
+        {
+            mRightDragExceededThreshold = true;
+            mHasObstacleGhost = true;
+        }
+        mObstacleRadius = radius;
     }
 
     update();
@@ -185,14 +249,38 @@ void TableTopView::mouseMoveEvent(QMouseEvent* aEvent)
 
 void TableTopView::mouseReleaseEvent(QMouseEvent* aEvent)
 {
-    if (!mDraggingGoal)
+    if (!mDraggingGoal && !mDraggingObstacle)
     {
         QWidget::mouseReleaseEvent(aEvent);
         return;
     }
 
-    mDraggingGoal = false;
-    emit goalPoseSelected(mGoalX, mGoalY, mGoalYaw);
+    if (mDraggingGoal)
+    {
+        mDraggingGoal = false;
+        emit goalPoseSelected(mGoalX, mGoalY, mGoalYaw);
+    }
+    else if (mDraggingObstacle)
+    {
+        mDraggingObstacle = false;
+
+        if (mRightDragExceededThreshold)
+        {
+            emit obstaclePlaced(mObstacleX, mObstacleY, mObstacleRadius);
+        }
+        else
+        {
+            // Plain right-click, no drag - offer to clear instead.
+            QMenu menu;
+            QAction* clearAction = menu.addAction("Clear Obstacles");
+
+            QAction* chosen = menu.exec(QCursor::pos());
+            if (chosen == clearAction)
+            {
+                emit clearObstaclesRequested();
+            }
+        }
+    }
 }
 
 void TableTopView::drawGrid(QPainter& aPainter, const QRectF& aTableRect) const
@@ -225,6 +313,41 @@ void TableTopView::drawGrid(QPainter& aPainter, const QRectF& aTableRect) const
     aPainter.setBrush(QColor(140, 140, 140));
     QPointF origin = worldToPixel(aTableRect, 0.0, 0.0);
     aPainter.drawEllipse(origin, 3.5, 3.5);
+
+    aPainter.restore();
+}
+
+void TableTopView::drawPath(QPainter& aPainter, const QRectF& aTableRect) const
+{
+    if (!mHasPose || mPath.isEmpty())
+    {
+        return;
+    }
+
+    // Anchor the line to the robot's own live position rather than whatever
+    // (possibly stale) first point abv_guidance published - see
+    // StraightLineGenerator::getPath().
+    QPolygonF pixels;
+    pixels.reserve(mPath.size() + 1);
+    pixels << worldToPixel(aTableRect, mX, mY);
+    for (const QPointF& worldPt : mPath)
+    {
+        pixels << worldToPixel(aTableRect, worldPt.x(), worldPt.y());
+    }
+
+    aPainter.save();
+
+    // Tesla-style planned-path line: a soft, wider translucent glow pass
+    // underneath a crisp solid line on top, drawn before the robot glyph so
+    // the vehicle renders above the path it's following.
+    QPen glowPen(QColor(60, 140, 255, 60), 13.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    aPainter.setPen(glowPen);
+    aPainter.setBrush(Qt::NoBrush);
+    aPainter.drawPolyline(pixels);
+
+    QPen linePen(QColor(70, 150, 255), 4.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    aPainter.setPen(linePen);
+    aPainter.drawPolyline(pixels);
 
     aPainter.restore();
 }
@@ -389,6 +512,29 @@ void TableTopView::drawRobot(QPainter& aPainter, const QRectF& aTableRect) const
     aPainter.restore();
 }
 
+void TableTopView::drawObstacles(QPainter& aPainter, const QRectF& aTableRect) const
+{
+    if (mObstacles.isEmpty())
+    {
+        return;
+    }
+
+    double scale = worldScale(aTableRect);
+
+    aPainter.save();
+    aPainter.setPen(QPen(QColor(220, 80, 60), 1.5));
+    aPainter.setBrush(QColor(220, 80, 60, 90));
+
+    for (const PlacedObstacle& obstacle : mObstacles)
+    {
+        QPointF center = worldToPixel(aTableRect, obstacle.mX, obstacle.mY);
+        double r = obstacle.mRadius * scale;
+        aPainter.drawEllipse(center, r, r);
+    }
+
+    aPainter.restore();
+}
+
 void TableTopView::drawGoalGhost(QPainter& aPainter, const QRectF& aTableRect) const
 {
     double halfL = mConfig.mRobotLength / 2.0;
@@ -429,6 +575,22 @@ void TableTopView::drawGoalGhost(QPainter& aPainter, const QRectF& aTableRect) c
     aPainter.restore();
 }
 
+void TableTopView::drawObstacleGhost(QPainter& aPainter, const QRectF& aTableRect) const
+{
+    double scale = worldScale(aTableRect);
+    QPointF center = worldToPixel(aTableRect, mObstacleX, mObstacleY);
+    double r = mObstacleRadius * scale;
+
+    aPainter.save();
+
+    QColor ghostColor(255, 140, 100);
+    aPainter.setPen(QPen(ghostColor, 1.5, Qt::DashLine));
+    aPainter.setBrush(QColor(255, 140, 100, 50));
+    aPainter.drawEllipse(center, r, r);
+
+    aPainter.restore();
+}
+
 void TableTopView::drawReadout(QPainter& aPainter) const
 {
     QString text = mHasPose
@@ -452,5 +614,53 @@ void TableTopView::drawReadout(QPainter& aPainter) const
 
     aPainter.setPen(Qt::white);
     aPainter.drawText(box, Qt::AlignCenter, text);
+    aPainter.restore();
+}
+
+void TableTopView::drawLegend(QPainter& aPainter) const
+{
+    // Stacked short lines rather than one long line - a single line this
+    // long ran off the right edge on narrower windows even at a small point
+    // size, since its width doesn't depend on the widget's actual width.
+    static const QVector<QString> lines = {
+        "Left-drag: Set Goal",
+        "Right-drag: Place Obstacle",
+        "Right-click: Clear Obstacles"
+    };
+
+    QFont font = aPainter.font();
+    font.setPointSize(8);
+    aPainter.setFont(font);
+
+    QFontMetrics fm(font);
+    double textWidth = 0.0;
+    for (const QString& line : lines)
+    {
+        textWidth = std::max(textWidth, static_cast<double>(fm.horizontalAdvance(line)));
+    }
+
+    // Clamp to the widget's own width as a last resort, so the box itself
+    // never extends past the visible area even on a very narrow window.
+    double boxWidth = std::min(textWidth + 16.0, static_cast<double>(width()) - 16.0);
+    double lineHeight = fm.height();
+    double boxHeight = lineHeight * lines.size() + 10.0;
+
+    // Bottom-left of the widget rect (not the table rect), so it stays put
+    // and visible regardless of table scaling/margins - same corner-overlay
+    // approach as drawReadout, just anchored to the opposite corner so the
+    // two never overlap.
+    QRectF box(8, height() - boxHeight - 8, boxWidth, boxHeight);
+
+    aPainter.save();
+    aPainter.setPen(Qt::NoPen);
+    aPainter.setBrush(QColor(30, 30, 30, 200));
+    aPainter.drawRoundedRect(box, 4, 4);
+
+    aPainter.setPen(QColor(180, 180, 180));
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        QRectF lineRect(box.left() + 8, box.top() + 5 + i * lineHeight, box.width() - 16, lineHeight);
+        aPainter.drawText(lineRect, Qt::AlignLeft | Qt::AlignVCenter, lines[i]);
+    }
     aPainter.restore();
 }

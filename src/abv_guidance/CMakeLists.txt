@@ -9,10 +9,12 @@ find_package(Eigen3 REQUIRED)
 find_package(plog REQUIRED)
 
 set(ABV_GUIDANCE_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/src/CollisionAvoidPathGenerator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/FromFileGenerator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/PathWatchdog.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/RosCommandSource.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/Scene.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/StateMachine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/StraightLineGenerator.cpp
 )

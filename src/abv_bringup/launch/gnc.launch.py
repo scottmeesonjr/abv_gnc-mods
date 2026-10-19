@@ -15,9 +15,23 @@ def generate_launch_description():
         DeclareLaunchArgument('sim', default_value='false'),
 
         Node(
-            package='abv_controller',
-            executable='abv_controller',
-            name='abv_controller',
+            package='abv_goal_manager',
+            executable='abv_goal_manager',
+            name='abv_goal_manager',
+            output='screen',
+            emulate_tty=True,
+        ),
+        Node(
+            package='abv_control',
+            executable='abv_control',
+            name='abv_control',
+            output='screen',
+            emulate_tty=True,
+        ),
+        Node(
+            package='abv_thrusters',
+            executable='abv_thrusters',
+            name='abv_thrusters',
             output='screen',
             emulate_tty=True,
         ),
@@ -42,13 +56,20 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
         ),
-        # Node(
-        #     package='abv_rl-cpp',
-        #     executable='abv_rl-cpp',
-        #     name='rl_policy_node', 
-        #     output='screen', 
-        #     emulate_tty=True,
-        # ),
+        Node(
+            package='abv_policy_registry',
+            executable='abv_policy_registry',
+            name='abv_policy_registry',
+            output='screen',
+            emulate_tty=True,
+        ),
+        Node(
+            package='abv_rl-cpp',
+            executable='abv_rl-cpp',
+            name='rl_policy_node',
+            output='screen',
+            emulate_tty=True,
+        ),
 
         GroupAction(
             condition=IfCondition(LaunchConfiguration('sim')),

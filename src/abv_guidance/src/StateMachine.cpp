@@ -5,6 +5,7 @@
 
 #include "abv_msgs/msg/abv_controller_command.hpp"
 #include "abv_msgs/msg/abv_guidance_status.hpp"
+#include "abv_msgs/msg/abv_path.hpp"
 
 #include "abv_common/RateController.hpp"
 #include "abv_common/ConfigurationManager.h"
@@ -13,12 +14,14 @@
 #include "abv_guidance/StateMachine.h"
 #include "abv_guidance/StraightLineGenerator.h"
 #include "abv_guidance/FromFileGenerator.h"
+#include "abv_guidance/CollisionAvoidPathGenerator.h"
 
 StateMachine::StateMachine() : 
     mDone(false), mActiveState(States::STARTUP)
 {
-    RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvControllerCommand>("abv/controller/command"); 
-    RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvGuidanceStatus>("abv/guidance/status"); 
+    RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvControllerCommand>("abv/controller/command");
+    RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvGuidanceStatus>("abv/guidance/status");
+    RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvPath>("abv/guidance/path");
 
     RosTopicManager::getInstance()->createSubscriber<abv_msgs::msg::AbvControllerStatus>("abv/controller/status", 
             std::bind(&StateMachine::controllerStatusCallback, this, std::placeholders::_1)); 
@@ -111,13 +114,18 @@ void StateMachine::generatePath()
     // and do any startup/init stuff for that IPathGenerator 
     if("line" == mCommand.mType || "Line" == mCommand.mType)
     {
-        auto pathGen = std::make_unique<StraightLineGenerator>(mCommand.mGoal, mNavSource.getCurrentPose()); 
-        mPathGenerator = std::move(pathGen);         
+        auto pathGen = std::make_unique<StraightLineGenerator>(mCommand.mGoal);
+        mPathGenerator = std::move(pathGen);
     }
     else if("file" == mCommand.mType || "File" == mCommand.mType)
     {
-        auto pathGen = std::make_unique<FromFileGenerator>(); 
-        mPathGenerator = std::move(pathGen); 
+        auto pathGen = std::make_unique<FromFileGenerator>();
+        mPathGenerator = std::move(pathGen);
+    }
+    else if("avoid" == mCommand.mType || "Avoid" == mCommand.mType)
+    {
+        auto pathGen = std::make_unique<CollisionAvoidPathGenerator>(mCommand.mGoal, mNavSource, mScene);
+        mPathGenerator = std::move(pathGen);
     }
     else
     {
@@ -141,6 +149,14 @@ void StateMachine::generatePath()
 
 void StateMachine::sendWaypoint()
 {
+    // snapshot the remaining path *before* consuming the next waypoint, so
+    // FromFileGenerator's mIndex-based slice still includes the one about to
+    // be dispatched (see IPathGenerator::getPath()) - truncated to what the
+    // generator advises is actually meaningful to publish right now.
+    std::vector<Waypoint> fullPath = mPathGenerator->getPath();
+    std::size_t previewLen = std::min(mPathGenerator->getPathPreviewLength(), fullPath.size());
+    mCurrentPath.set(std::vector<Waypoint>(fullPath.begin(), fullPath.begin() + previewLen));
+
     // get next waypoint from current IPathGenerator and send via ROS2
     Waypoint wp = mPathGenerator->getNext();
     mCurrentWaypoint = wp;
@@ -363,8 +379,26 @@ void StateMachine::statusPublishLoop()
         statusToSend.set__status(nodeStatus); 
 
         RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvGuidanceStatus>(
-                "abv/guidance/status", statusToSend); 
+                "abv/guidance/status", statusToSend);
 
-        rate.block(); 
+        // no active path outside STARTUP/IDLE - publish empty rather than a
+        // stale one so the GUI's drawn path clears on arrival/stop
+        bool hasActivePath = getActiveState() != States::STARTUP && getActiveState() != States::IDLE;
+        std::vector<Waypoint> pathToSend = hasActivePath ? mCurrentPath.get() : std::vector<Waypoint>{};
+
+        abv_msgs::msg::AbvPath pathMsg;
+        for(const Waypoint& wp : pathToSend)
+        {
+            abv_msgs::msg::AbvVec3 pt;
+            pt.set__x(wp.mPose.x());
+            pt.set__y(wp.mPose.y());
+            pt.set__yaw(wp.mPose.z());
+            pathMsg.waypoints.push_back(pt);
+        }
+
+        RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvPath>(
+                "abv/guidance/path", pathMsg);
+
+        rate.block();
     }
 }

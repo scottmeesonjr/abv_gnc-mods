@@ -185,6 +185,7 @@ make && sudo make install
 ROBOT_WS=~/robot_ws
 mkdir -p "$ROBOT_WS"/src
 clone_and_checkout ptera samlovelace/ptera main "$ROBOT_WS"/src
+source /opt/ros/humble/setup.bash
 cd "$ROBOT_WS" && colcon build --packages-skip ptera_sim
 
 # build the main workspace

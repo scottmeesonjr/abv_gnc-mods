@@ -356,11 +356,20 @@ void CommandPanel::sendPoseCommand(double aX, double aY, double aYaw)
     pose.set__y(aY);
     pose.set__yaw(aYaw);
 
-    abv_msgs::msg::AbvControllerCommand cmd;
-    cmd.set__type("pose");
-    cmd.set__data(pose);
+    abv_msgs::msg::AbvState goalState;
+    goalState.set__position(pose);
 
-    RosTopicManager::getInstance()->publishMessage("abv/controller/command", cmd);
+    abv_msgs::msg::AbvGuidanceCommand cmd;
+    cmd.set__type(mObstaclesPresent ? "avoid" : "line");
+    cmd.set__duration(-1);
+    cmd.set__goal_state(goalState);
+
+    RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command", cmd);
+}
+
+void CommandPanel::setObstaclesPresent(bool aPresent)
+{
+    mObstaclesPresent = aPresent;
 }
 
 void CommandPanel::onSendVelocity()

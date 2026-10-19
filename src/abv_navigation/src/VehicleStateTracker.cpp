@@ -39,11 +39,14 @@ VehicleStateTracker::VehicleStateTracker() :
     setStateTracking(false); 
     mStateTrackingThread = std::thread(&VehicleStateTracker::stateTrackerLoop, this); 
 
-    // setup subscriber to get control status 
-    RosTopicManager::getInstance()->createSubscriber<abv_msgs::msg::AbvControllerStatus>("abv/controller/status", 
-                                                                                          std::bind(&VehicleStateTracker::controllerStatusCallback, 
-                                                                                          this, 
-                                                                                          std::placeholders::_1)); 
+    // setup subscriber to get applied thrust, used as the EKF's control input.
+    // Lives on abv/thrusters/status (published by abv_thrusters) rather than
+    // abv/controller/status, since applied thrust is computed by whichever
+    // node is currently driving the thrusters, not abv_goal_manager.
+    RosTopicManager::getInstance()->createSubscriber<abv_msgs::msg::AbvThrusterStatus>("abv/thrusters/status",
+                                                                                          std::bind(&VehicleStateTracker::thrusterStatusCallback,
+                                                                                          this,
+                                                                                          std::placeholders::_1));
 }
 
 VehicleStateTracker::~VehicleStateTracker()
@@ -146,11 +149,11 @@ void VehicleStateTracker::stateTrackerLoop()
     }
 }
 
-void VehicleStateTracker::controllerStatusCallback(abv_msgs::msg::AbvControllerStatus::ConstSharedPtr aMsg)
+void VehicleStateTracker::thrusterStatusCallback(abv_msgs::msg::AbvThrusterStatus::ConstSharedPtr aMsg)
 {
-    Eigen::Vector3d appliedThrust; 
-    appliedThrust << aMsg->fx, aMsg->fy, aMsg->tz; 
-    mEKF.setLatestInput(appliedThrust); 
+    Eigen::Vector3d appliedThrust;
+    appliedThrust << aMsg->fx, aMsg->fy, aMsg->tz;
+    mEKF.setLatestInput(appliedThrust);
 }
 
 inline bool VehicleStateTracker::isWithinDeadReckonBound(std::chrono::system_clock::time_point aNow,

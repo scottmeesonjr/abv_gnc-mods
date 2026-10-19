@@ -5,21 +5,22 @@
 #include <eigen3/Eigen/Dense>
 
 class StraightLineGenerator : public IPathGenerator
-{ 
+{
 public:
-    StraightLineGenerator(const Waypoint& aGoal, const Eigen::Vector3d& aCurrent);
-    ~StraightLineGenerator() override; 
+    StraightLineGenerator(const Waypoint& aGoal);
+    ~StraightLineGenerator() override;
 
-    bool init() override; 
-    bool hasNext() override; 
-    Waypoint getNext() override; 
+    bool init() override;
+    bool hasNext() override;
+    Waypoint getNext() override;
+    std::vector<Waypoint> getPath() const override;
+    std::size_t getPathPreviewLength() const override;
 
 private:
 
     Waypoint mGoal;
-    Eigen::Vector3d mStartPose; 
 
-    bool mHasNext; 
-   
+    bool mHasNext;
+
 };
 #endif //STRAIGHTLINEGENERATOR_H

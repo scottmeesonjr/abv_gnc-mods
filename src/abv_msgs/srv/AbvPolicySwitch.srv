@@ -1,0 +1,9 @@
+# Requests abv_policy_registry switch the active control policy. Hosted on
+# abv/policy/switch. Rejected (success=false) if policy_name isn't currently
+# registered or has gone stale - the registry never switches to a policy it
+# can't confirm is alive.
+
+string policy_name
+---
+bool success
+string message

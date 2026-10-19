@@ -24,11 +24,18 @@ public:
     // mPoseXDirty et al.) so it doesn't clobber an in-progress/pending edit.
     void setCurrentPose(double aX, double aY, double aYaw);
 
-    // Builds and publishes an AbvControllerCommand type "pose" for the
-    // given pose. Factored out of onSendPose() so other callers (e.g. the
-    // table view's click-to-set-goal) can send a pose without going through
-    // the Pose panel's spin boxes.
+    // Builds and publishes an AbvGuidanceCommand for the given pose - type
+    // "line" (no obstacles known) or "avoid" (obstacles present, see
+    // setObstaclesPresent) - since only CollisionAvoidPathGenerator actually
+    // checks for collisions. Factored out of onSendPose() so other callers
+    // (e.g. the table view's click-to-set-goal) can send a pose without
+    // going through the Pose panel's spin boxes.
     void sendPoseCommand(double aX, double aY, double aYaw);
+
+    // Called by main.cpp whenever the published obstacle set (abv/scene/obstacles)
+    // changes, so sendPoseCommand() knows whether to route through
+    // CollisionAvoidPathGenerator ("avoid") or the plain "line" generator.
+    void setObstaclesPresent(bool aPresent);
 
 public slots:
     // Slot counterpart of setCurrentPose for TopicAdapter::newDataVariant.
@@ -76,4 +83,6 @@ private:
     QCheckBox*      mBodyFrameCheckbox{nullptr};
 
     rclcpp::TimerBase::SharedPtr mFireTimer{nullptr};
+
+    bool mObstaclesPresent{false};
 };

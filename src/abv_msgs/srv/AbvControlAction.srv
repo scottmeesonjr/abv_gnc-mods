@@ -1,9 +1,0 @@
-
-AbvVec3 pose
-AbvVec3 vel
-AbvVec3 goal
-AbvVec3 error
-uint8 goal_type
----
-AbvVec3 action
-bool is_global    

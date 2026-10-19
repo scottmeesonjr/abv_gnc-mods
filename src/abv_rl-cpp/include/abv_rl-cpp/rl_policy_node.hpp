@@ -9,7 +9,8 @@
 #include <onnxruntime_cxx_api.h>
 
 #include "rclcpp/rclcpp.hpp"
-#include "abv_msgs/srv/abv_control_action.hpp"
+#include "abv_msgs/msg/abv_control_context.hpp"
+#include "abv_msgs/msg/abv_policy_active.hpp"
 
 // ---------------------------------------------------------------------------
 // Obstacle represented as (center_x, center_y, radius)
@@ -88,18 +89,25 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// ROS 2 node
+// RL policy handler: subscribes to abv/controller/context (the same topic
+// abv_control subscribes to), runs inference on each message, and publishes
+// the resulting control effort on abv/thrusters/command - a structural peer
+// of abv_control's ControlLawHandler, interchangeable with it.
+//
+// Also subscribes to abv/policy/active and gates contextCallback on it: when
+// this node isn't the active policy, it skips running inference AND
+// publishing entirely (not just relying on abv_thrusters' downstream
+// arbiter), so a switched-away policy genuinely stops running.
 // ---------------------------------------------------------------------------
-class RLPolicyNode : public rclcpp::Node {
+class RLPolicyNode {
 public:
     RLPolicyNode();
 
 private:
-    void handle_request(
-        const std::shared_ptr<abv_msgs::srv::AbvControlAction::Request>  req,
-              std::shared_ptr<abv_msgs::srv::AbvControlAction::Response> res
-    );
+    void contextCallback(abv_msgs::msg::AbvControlContext::SharedPtr aCtxMsg);
+    void policyActiveCallback(abv_msgs::msg::AbvPolicyActive::SharedPtr aMsg);
 
     std::unique_ptr<RLController> controller_;
-    rclcpp::Service<abv_msgs::srv::AbvControlAction>::SharedPtr service_;
+    const std::string mPolicyName{"rl"};
+    bool mIsActive{false};
 };

@@ -12,7 +12,7 @@
 #include "RosStatePublisher.h"
 #include "ExtendedKalmanFilter.h"
 
-#include "abv_msgs/msg/abv_controller_status.hpp"
+#include "abv_msgs/msg/abv_thruster_status.hpp"
 
 class VehicleStateTracker
 {
@@ -60,7 +60,7 @@ private:
 
     std::mutex mControlInputMutex; 
     Eigen::Vector3d mLatestControlInput; 
-    void controllerStatusCallback(abv_msgs::msg::AbvControllerStatus::ConstSharedPtr aMsg);
+    void thrusterStatusCallback(abv_msgs::msg::AbvThrusterStatus::ConstSharedPtr aMsg);
   
     // Pure helper (no ROS/threads) so the dead-reckoning bound check can be unit
     // tested directly with fabricated time_points.

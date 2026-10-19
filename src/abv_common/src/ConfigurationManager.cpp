@@ -50,11 +50,23 @@ void ConfigurationManager::loadConfiguration()
     YAML::Node controlNode = config["Control"];
     parseControlConfig(controlNode);
 
+    YAML::Node controlLawNode = config["ControlLaw"];
+    parseControlLawConfig(controlLawNode);
+
+    YAML::Node thrustersNode = config["Thrusters"];
+    parseThrusterConfig(thrustersNode);
+
     YAML::Node heartbeatNode = config["Heartbeat"];
     parseHeartbeatConfig(heartbeatNode);
 
     YAML::Node tableViewNode = config["TableView"];
     parseTableViewConfig(tableViewNode);
+
+    YAML::Node sceneNode = config["Scene"];
+    parseSceneConfig(sceneNode);
+
+    YAML::Node collisionAvoidNode = config["CollisionAvoid"];
+    parseCollisionAvoidConfig(collisionAvoidNode);
 }
 
 void ConfigurationManager::parseGuidanceConfig(const YAML::Node& aNode)
@@ -80,31 +92,9 @@ void ConfigurationManager::parseNavigationConfig(const YAML::Node& aNode)
 void ConfigurationManager::parseControlConfig(const YAML::Node& aNode)
 {
     mControlConfig.mStateMachineRate = aNode["StateMachine"]["Rate"].as<int>();
-    mControlConfig.mControlPolicyType = aNode["ControlPolicy"].as<std::string>("PID");
     mControlConfig.mPoseArrivalTol = ConfigUtils::parseVector3d(aNode["Arrival"]["Tolerance"]);
     mControlConfig.mArrivalDuration = aNode["Arrival"]["Duration"].as<double>();
     mControlConfig.mNavDataTimeout = aNode["NavDataTimeout"].as<double>(1.0);
-
-    mControlConfig.mKp = ConfigUtils::parseVector3d(aNode["Gains"]["Kp"]);
-    mControlConfig.mKi = ConfigUtils::parseVector3d(aNode["Gains"]["Ki"]);
-    mControlConfig.mKd = ConfigUtils::parseVector3d(aNode["Gains"]["Kd"]);
-
-    mControlConfig.mSchmittTriggerOn = ConfigUtils::parseVector3d(aNode["Thrusters"]["InputDiscretization"]["On"]);
-    mControlConfig.mSchmittTriggerOff = ConfigUtils::parseVector3d(aNode["Thrusters"]["InputDiscretization"]["Off"]);
-
-    mControlConfig.mThrusterAllocationStrategy = aNode["Thrusters"]["AllocationStrategy"].as<std::string>("LookupTable");
-
-    mControlConfig.mAllocationX   = ConfigUtils::parseIntVector(aNode["Thrusters"]["Allocation"]["x"]);
-    mControlConfig.mAllocationY   = ConfigUtils::parseIntVector(aNode["Thrusters"]["Allocation"]["y"]);
-    mControlConfig.mAllocationYaw = ConfigUtils::parseIntVector(aNode["Thrusters"]["Allocation"]["yaw"]);
-    mControlConfig.mAllocationThreshold = aNode["Thrusters"]["Allocation"]["Threshold"].as<double>(0.1);
-
-    mControlConfig.mThrusterDriverType = aNode["Thrusters"]["ThrusterDriver"]["Type"].as<std::string>();
-    if("JETGPIO" == mControlConfig.mThrusterDriverType)
-    {
-        // parse GPIO pins 
-        mControlConfig.mGpioPins = ConfigUtils::parseIntVector(aNode["Thrusters"]["ThrusterDriver"]["GPIO"]["pins"]); 
-    }
 
     mControlConfig.mForce = aNode["Dynamics"]["ThrusterForce"].as<double>();
     mControlConfig.mMomentArm = aNode["Dynamics"]["MomentArm"].as<double>();
@@ -116,6 +106,38 @@ void ConfigurationManager::parseControlConfig(const YAML::Node& aNode)
     mControlConfig.mExternalStateTopic = aNode["Dynamics"]["ExternalStateTopic"].as<std::string>("abv/sim/gazebo_state");
     mControlConfig.mWrenchCommandTopic = aNode["Dynamics"]["WrenchCommandTopic"].as<std::string>("gazebo/wrench_cmd");
     mControlConfig.mWrenchTargetLink = aNode["Dynamics"]["WrenchTargetLink"].as<std::string>("base_link");
+}
+
+void ConfigurationManager::parseControlLawConfig(const YAML::Node& aNode)
+{
+    mControlLawConfig.mLawType = aNode["Law"].as<std::string>("PID");
+
+    mControlLawConfig.mKp = ConfigUtils::parseVector3d(aNode["Pid"]["Kp"]);
+    mControlLawConfig.mKi = ConfigUtils::parseVector3d(aNode["Pid"]["Ki"]);
+    mControlLawConfig.mKd = ConfigUtils::parseVector3d(aNode["Pid"]["Kd"]);
+}
+
+void ConfigurationManager::parseThrusterConfig(const YAML::Node& aNode)
+{
+    mThrusterConfig.mSchmittTriggerOn = ConfigUtils::parseVector3d(aNode["InputDiscretization"]["On"]);
+    mThrusterConfig.mSchmittTriggerOff = ConfigUtils::parseVector3d(aNode["InputDiscretization"]["Off"]);
+
+    mThrusterConfig.mThrusterAllocationStrategy = aNode["AllocationStrategy"].as<std::string>("LookupTable");
+
+    mThrusterConfig.mAllocationX   = ConfigUtils::parseIntVector(aNode["Allocation"]["x"]);
+    mThrusterConfig.mAllocationY   = ConfigUtils::parseIntVector(aNode["Allocation"]["y"]);
+    mThrusterConfig.mAllocationYaw = ConfigUtils::parseIntVector(aNode["Allocation"]["yaw"]);
+    mThrusterConfig.mAllocationThreshold = aNode["Allocation"]["Threshold"].as<double>(0.1);
+
+    mThrusterConfig.mThrusterDriverType = aNode["ThrusterDriver"]["Type"].as<std::string>();
+    if("JETGPIO" == mThrusterConfig.mThrusterDriverType)
+    {
+        // parse GPIO pins
+        mThrusterConfig.mGpioPins = ConfigUtils::parseIntVector(aNode["ThrusterDriver"]["GPIO"]["pins"]);
+    }
+
+    mThrusterConfig.mForce = aNode["Force"].as<double>();
+    mThrusterConfig.mMomentArm = aNode["MomentArm"].as<double>();
 }
 
 void ConfigurationManager::parseHeartbeatConfig(const YAML::Node& aNode)
@@ -131,6 +153,20 @@ void ConfigurationManager::parseTableViewConfig(const YAML::Node& aNode)
     mTableViewConfig.mHeight = aNode["Height"].as<double>();
     mTableViewConfig.mRobotWidth = aNode["RobotWidth"].as<double>();
     mTableViewConfig.mRobotLength = aNode["RobotLength"].as<double>();
+}
+
+void ConfigurationManager::parseSceneConfig(const YAML::Node& aNode)
+{
+    mSceneConfig.mXMin = aNode["XMin"].as<double>();
+    mSceneConfig.mXMax = aNode["XMax"].as<double>();
+    mSceneConfig.mYMin = aNode["YMin"].as<double>();
+    mSceneConfig.mYMax = aNode["YMax"].as<double>();
+}
+
+void ConfigurationManager::parseCollisionAvoidConfig(const YAML::Node& aNode)
+{
+    mCollisionAvoidConfig.mGridResolution = aNode["GridResolution"].as<double>();
+    mCollisionAvoidConfig.mReplanRate = aNode["ReplanRate"].as<double>();
 }
 
 
