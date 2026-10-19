@@ -1,10 +1,14 @@
-
 #include "abv_common/ConfigurationManager.h"
 #include "plog/Log.h"
 #include <yaml-cpp/yaml.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <filesystem> 
+#include <array>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 ConfigurationManager::ConfigurationManager()
 {
@@ -67,6 +71,17 @@ void ConfigurationManager::loadConfiguration()
 
     YAML::Node collisionAvoidNode = config["CollisionAvoid"];
     parseCollisionAvoidConfig(collisionAvoidNode);
+
+    // Docking block is optional: if it's missing, DockingConfig keeps its defaults
+    YAML::Node dockingNode = config["Docking"];
+    if (dockingNode)
+    {
+        parseDockingConfig(dockingNode);
+    }
+    else
+    {
+        LOGW << "No Docking block in config.yaml, using DockingConfig defaults";
+    }
 }
 
 void ConfigurationManager::parseGuidanceConfig(const YAML::Node& aNode)
@@ -88,8 +103,14 @@ void ConfigurationManager::parseNavigationConfig(const YAML::Node& aNode)
     mNavigationConfig.mMaxDeadReckonDuration = aNode["MaxDeadReckonDuration"].as<double>(0.5);
     mNavigationConfig.mSimulateDropout = aNode["SimulateDropout"].as<bool>(false);
 
+    // SYS.01 velocity alert (m/s)
     mNavigationConfig.mVelocityAlertThreshold = aNode["VelocityAlertThreshold"].as<double>(0.125);
-    mNavigationConfig.mVelocityAlertClear     = aNode["VelocityAlertClear"].as<double>(0.115);
+    mNavigationConfig.mVelocityAlertClear = aNode["VelocityAlertClear"].as<double>(0.115);
+
+    if (mNavigationConfig.mVelocityAlertClear >= mNavigationConfig.mVelocityAlertThreshold)
+    {
+        throw std::runtime_error("Navigation.VelocityAlertClear must be less than VelocityAlertThreshold");
+    }
 }
 
 void ConfigurationManager::parseControlConfig(const YAML::Node& aNode)
@@ -170,6 +191,45 @@ void ConfigurationManager::parseCollisionAvoidConfig(const YAML::Node& aNode)
 {
     mCollisionAvoidConfig.mGridResolution = aNode["GridResolution"].as<double>();
     mCollisionAvoidConfig.mReplanRate = aNode["ReplanRate"].as<double>();
+}
+
+void ConfigurationManager::parseDockingConfig(const YAML::Node& aNode)
+{
+    auto readTriple = [&](const char* aKey, std::array<double, 3>& aOut)
+    {
+        if (!aNode[aKey]) return;  // keep default
+        auto v = aNode[aKey].as<std::vector<double>>();
+        if (v.size() != 3)
+        {
+            throw std::runtime_error(std::string("Docking.") + aKey + " must have 3 values");
+        }
+        aOut = {v[0], v[1], v[2]};
+    };
+
+    DockingConfig& c = mDockingConfig;
+    readTriple("TargetPose", c.mTargetPose);
+    readTriple("StartTolerance", c.mStartTolerance);
+    c.mPortOffset = aNode["PortOffset"].as<double>(c.mPortOffset);
+    c.mStandoffDistance = aNode["StandoffDistance"].as<double>(c.mStandoffDistance);
+    c.mApproachVelocity = aNode["ApproachVelocity"].as<double>(c.mApproachVelocity);
+    c.mApproachTimeout = aNode["ApproachTimeout"].as<double>(c.mApproachTimeout);
+    c.mCaptureRange = aNode["CaptureRange"].as<double>(c.mCaptureRange);
+    c.mDwellTime = aNode["DwellTime"].as<double>(c.mDwellTime);
+    c.mCycles = aNode["Cycles"].as<int>(c.mCycles);
+    c.mSerialPort = aNode["SerialPort"].as<std::string>(c.mSerialPort);
+    c.mBaudRate = aNode["BaudRate"].as<int>(c.mBaudRate);
+    c.mStatusTimeout = aNode["StatusTimeout"].as<double>(c.mStatusTimeout);
+
+    // Warn only, so you can still deliberately run outside the band (e.g. to trip the alert).
+    if (c.mApproachVelocity < 0.05 || c.mApproachVelocity > 0.10)
+    {
+        LOGW << "Docking.ApproachVelocity " << c.mApproachVelocity
+             << " m/s is outside the SYS.10 band (0.05-0.10 m/s)";
+    }
+    if (c.mStandoffDistance <= c.mCaptureRange)
+    {
+        throw std::runtime_error("Docking.StandoffDistance must be greater than CaptureRange");
+    }
 }
 
 
