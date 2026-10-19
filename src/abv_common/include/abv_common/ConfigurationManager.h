@@ -41,6 +41,7 @@ public:
     TableViewConfig& getTableViewConfig() { return mTableViewConfig; }
     SceneConfig& getSceneConfig() { return mSceneConfig; }
     CollisionAvoidConfig& getCollisionAvoidConfig() { return mCollisionAvoidConfig; }
+    DockingConfig& getDockingConfig() { return mDockingConfig; }
 
 private: 
     /**
@@ -61,6 +62,7 @@ private:
     void parseTableViewConfig(const YAML::Node& aNode);
     void parseSceneConfig(const YAML::Node& aNode);
     void parseCollisionAvoidConfig(const YAML::Node& aNode);
+    void parseDockingConfig(const YAML::Node& aNode);
 
 private:
 
@@ -73,8 +75,7 @@ private:
     TableViewConfig mTableViewConfig;
     SceneConfig mSceneConfig;
     CollisionAvoidConfig mCollisionAvoidConfig;
+    DockingConfig mDockingConfig;
 };
 
 #endif
-
-    
