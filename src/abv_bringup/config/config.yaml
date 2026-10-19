@@ -15,29 +15,29 @@ Navigation:
   RigidBodyName: ABV1
   MaxDeadReckonDuration: 0.5 # seconds - EKF free-run bound before output is frozen and marked invalid
   SimulateDropout: false # abv_simulator only - enables synthetic burst nav dropouts for testing
-  VelocityAlertThreshold: 0.125   # m/s, SYS.01 (0.10 + 25% margin)
-  VelocityAlertClear: 0.115       # m/s, alert clears below this (hysteresis)
+  VelocityAlertThreshold: 0.125 # m/s, SYS.01 (0.10 + 25% margin)
+  VelocityAlertClear: 0.115 # m/s, alert clears below this (hysteresis)
 
-Docking:
-  TargetPose: [0.0, 0.0, 0.0] # TBD: survey passive face center x, y (m) and outward normal yaw (rad)
-  PortOffset: 0.30 # TBD: measure, ABV rigid-body origin to active face (m)
-  StandoffDistance: 0.50 # m, face gap at start of approach
-  ApproachVelocity: 0.075 # m/s, SYS.10 band 0.05-0.10
-  ApproachTimeout: 30.0 # s
-  CaptureRange: 0.01 # m, stop if gap below this and no lock
-  StartTolerance: [0.015, 0.015, 0.017]  # m, m, rad (TEST.10/11)
-  DwellTime: 5.0 # s docked before UNLOCK
-  Cycles: 20 # SYS.02
-  SerialPort: /dev/ttyACM0
-  BaudRate: 115200
-  StatusTimeout: 0.5 # s
- 
   Network:
     Local:
       Ip: 192.168.1.15
 
     Server:
       Ip: 127.0.0.1
+
+Docking:
+  TargetPose: [3.4, 0.9, 3.14159] # SIM PLACEHOLDER: passive face center x, y (m), outward normal yaw (rad). Replace with surveyed values.
+  PortOffset: 0.30 # TBD: measure, ABV rigid-body origin to active face (m)
+  StandoffDistance: 0.50 # m, face gap at start of approach
+  ApproachVelocity: 0.075 # m/s, SYS.10 band 0.05-0.10
+  ApproachTimeout: 30.0 # s
+  CaptureRange: 0.01 # m, stop if gap below this and no lock
+  StartTolerance: [0.015, 0.015, 0.017] # m, m, rad (TEST.10/11)
+  DwellTime: 5.0 # s docked before UNLOCK
+  Cycles: 20 # SYS.02
+  SerialPort: /dev/ttyACM0
+  BaudRate: 115200
+  StatusTimeout: 0.5 # s
 
 Control:
   StateMachine:
