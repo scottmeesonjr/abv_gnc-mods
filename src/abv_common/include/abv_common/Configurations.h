@@ -45,6 +45,10 @@ struct NavigationConfig
     // abv_simulator only: enables its synthetic burst-dropout mechanism
     // (used to exercise disconnection handling end-to-end). Off by default.
     bool mSimulateDropout;
+    
+    // m/s, speed above which the velocity alert (SYS.01) is raised / cleared
+    double mVelocityAlertThreshold = 0.125;
+    double mVelocityAlertClear = 0.115;
 };
 
 struct HeartbeatConfig
