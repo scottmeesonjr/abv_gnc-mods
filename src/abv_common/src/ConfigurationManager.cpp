@@ -87,6 +87,9 @@ void ConfigurationManager::parseNavigationConfig(const YAML::Node& aNode)
 
     mNavigationConfig.mMaxDeadReckonDuration = aNode["MaxDeadReckonDuration"].as<double>(0.5);
     mNavigationConfig.mSimulateDropout = aNode["SimulateDropout"].as<bool>(false);
+
+    mNavigationConfig.mVelocityAlertThreshold = aNode["VelocityAlertThreshold"].as<double>(0.125);
+    mNavigationConfig.mVelocityAlertClear     = aNode["VelocityAlertClear"].as<double>(0.115);
 }
 
 void ConfigurationManager::parseControlConfig(const YAML::Node& aNode)
