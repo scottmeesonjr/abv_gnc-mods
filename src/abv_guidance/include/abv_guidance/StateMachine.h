@@ -1,13 +1,17 @@
 #ifndef STATEMACHINE_H
 #define STATEMACHINE_H
 
+#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <thread>
 #include <mutex>
 
 #include "abv_msgs/msg/abv_controller_status.hpp"
+#include "abv_msgs/msg/dock_status.hpp"
 
 #include "abv_common/ArrivalStatus.hpp"
+#include "abv_common/Configurations.h"
 #include "abv_common/RosNavigationListener.h"
 #include "abv_common/ThreadSafe.hpp"
 
@@ -72,6 +76,15 @@ private:
 
     std::thread mStatusPublishThread; 
 
+    // Docking: latest mechanism status from abv/dock/status (abv_dock_bridge)
+    ThreadSafe<bool> mDockLocked;
+    ThreadSafe<bool> mDockLinkOk;
+    DockingConfig mDockingConfig;
+
+    // start time of the current timed step (vel / approach / hold waypoints)
+    std::chrono::steady_clock::time_point mStepStart;
+    int mApproachCount;
+
 private: 
     void startup(); 
     void generatePath(); 
@@ -83,6 +96,14 @@ private:
     void onTimeout();
     void onWaypointTimeout();
     void sendStopCommand();
+
+    // Docking / timed-step support (non-"pose" waypoint types, see InternalTypes.hpp)
+    void sendVelocityCommand(const Eigen::Vector3d& aVel);
+    void sendDockCommand(std::uint8_t aCode);
+    bool isTimedStepComplete();
+    void finishStep();
+    double stepElapsed_s() const;
+    void dockStatusCallback(abv_msgs::msg::DockStatus::SharedPtr aStatus);
 
     // per-axis: aWaypoint's override if > 0, else mCommand.mArrivalTol
     // (which itself falls back to the configured default in

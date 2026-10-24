@@ -6,6 +6,7 @@
 #include "abv_msgs/msg/abv_controller_command.hpp"
 #include "abv_msgs/msg/abv_guidance_status.hpp"
 #include "abv_msgs/msg/abv_path.hpp"
+#include "abv_msgs/msg/dock_command.hpp"
 
 #include "abv_common/RateController.hpp"
 #include "abv_common/ConfigurationManager.h"
@@ -15,10 +16,19 @@
 #include "abv_guidance/StraightLineGenerator.h"
 #include "abv_guidance/FromFileGenerator.h"
 #include "abv_guidance/CollisionAvoidPathGenerator.h"
+#include "abv_guidance/CyclicDockGenerator.h"
 
 StateMachine::StateMachine() : 
-    mDone(false), mActiveState(States::STARTUP)
+    mDone(false), mActiveState(States::STARTUP), mApproachCount(0)
 {
+    mDockLocked.set(false);
+    mDockLinkOk.set(false);
+    mDockingConfig = ConfigurationManager::getInstance()->getDockingConfig();
+
+    RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::DockCommand>("abv/dock/cmd");
+    RosTopicManager::getInstance()->createSubscriber<abv_msgs::msg::DockStatus>("abv/dock/status",
+            std::bind(&StateMachine::dockStatusCallback, this, std::placeholders::_1));
+
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvControllerCommand>("abv/controller/command");
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvGuidanceStatus>("abv/guidance/status");
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvPath>("abv/guidance/path");
@@ -127,6 +137,13 @@ void StateMachine::generatePath()
         auto pathGen = std::make_unique<CollisionAvoidPathGenerator>(mCommand.mGoal, mNavSource, mScene);
         mPathGenerator = std::move(pathGen);
     }
+    else if("dock" == mCommand.mType || "Dock" == mCommand.mType)
+    {
+        // goal x = radial offset (m), goal yaw = angular offset (rad); see CyclicDockGenerator.h
+        mApproachCount = 0;
+        auto pathGen = std::make_unique<CyclicDockGenerator>(mCommand.mGoal.mPose.x(), mCommand.mGoal.mPose.z(), mScene);
+        mPathGenerator = std::move(pathGen);
+    }
     else
     {
         LOGW << "Unknown path generator of type: " << mCommand.mType; 
@@ -160,6 +177,48 @@ void StateMachine::sendWaypoint()
     // get next waypoint from current IPathGenerator and send via ROS2
     Waypoint wp = mPathGenerator->getNext();
     mCurrentWaypoint = wp;
+
+    // Non-pose steps (docking additions). These don't wait on the controller's
+    // ARRIVED status; waitForArrival() ends them with isTimedStepComplete().
+    if(wp.mType == WaypointType::VELOCITY || wp.mType == WaypointType::APPROACH)
+    {
+        if(wp.mType == WaypointType::APPROACH)
+        {
+            mApproachCount++;
+            LOGI << "Approach " << mApproachCount << " starting at "
+                 << std::hypot(wp.mVel.x(), wp.mVel.y()) << " m/s";
+            if(mDockLocked.get())
+            {
+                LOGW << "Mechanism already reports LOCKED at the start of the approach - check that the last unlock worked";
+            }
+        }
+        sendVelocityCommand(wp.mVel);
+        mStepStart = std::chrono::steady_clock::now();
+        setActiveState(States::WAITING_FOR_ARRIVAL);
+        return;
+    }
+    else if(wp.mType == WaypointType::HOLD)
+    {
+        LOGV << "Holding for " << wp.mTimeout << " s";
+        sendStopCommand();
+        mStepStart = std::chrono::steady_clock::now();
+        setActiveState(States::WAITING_FOR_ARRIVAL);
+        return;
+    }
+    else if(wp.mType == WaypointType::DOCK_COMMAND)
+    {
+        sendDockCommand(wp.mDockCommand);
+        finishStep();
+        return;
+    }
+    else if(wp.mType != WaypointType::POSE)
+    {
+        LOGE << "Unknown waypoint type '" << wp.mType << "', aborting path";
+        mWatchdog.cancel();
+        sendStopCommand();
+        setActiveState(States::IDLE);
+        return;
+    }
 
     // convert to idl type and publish
     abv_msgs::msg::AbvControllerCommand cmd;
@@ -206,6 +265,20 @@ void StateMachine::waitForExecution()
 
 void StateMachine::waitForArrival()
 {
+    // timed / docking steps finish on their own conditions, not controller ARRIVED
+    if(mCurrentWaypoint.mType != WaypointType::POSE)
+    {
+        if(isTimedStepComplete())
+        {
+            if(mCurrentWaypoint.mType != WaypointType::HOLD)
+            {
+                sendStopCommand();
+            }
+            finishStep();
+        }
+        return;
+    }
+
     // query controller status for arrival state, once arrived, send next waypoint
     if(mArrivalStatus.get() == Arrival::Status::ARRIVED)
     {
@@ -284,8 +357,10 @@ Eigen::Vector3d StateMachine::resolveArrivalTolerance(const Waypoint& aWaypoint)
 void StateMachine::onWaypointTimeout()
 {
     // stale timeout firing after we've already moved on (e.g. the overall
-    // path timeout or a new command already took us out of this waypoint)
-    if(getActiveState() != States::WAITING_FOR_EXECUTION && getActiveState() != States::WAITING_FOR_ARRIVAL)
+    // path timeout or a new command already took us out of this waypoint).
+    // Non-pose steps time themselves in isTimedStepComplete().
+    if((getActiveState() != States::WAITING_FOR_EXECUTION && getActiveState() != States::WAITING_FOR_ARRIVAL) ||
+       mCurrentWaypoint.mType != WaypointType::POSE)
     {
         return;
     }
@@ -389,6 +464,11 @@ void StateMachine::statusPublishLoop()
         abv_msgs::msg::AbvPath pathMsg;
         for(const Waypoint& wp : pathToSend)
         {
+            // hold / velocity / mechanism steps have no position to draw
+            if(!wp.hasDisplayPose())
+            {
+                continue;
+            }
             abv_msgs::msg::AbvVec3 pt;
             pt.set__x(wp.mPose.x());
             pt.set__y(wp.mPose.y());
@@ -401,4 +481,90 @@ void StateMachine::statusPublishLoop()
 
         rate.block();
     }
+}
+
+void StateMachine::sendVelocityCommand(const Eigen::Vector3d& aVel)
+{
+    abv_msgs::msg::AbvControllerCommand cmd;
+    cmd.set__type(kControllerVelocityType);
+    cmd.set__is_global(true); // table frame, so the approach stays on the docking axis whatever the heading
+
+    abv_msgs::msg::AbvVec3 vec;
+    vec.set__x(aVel.x());
+    vec.set__y(aVel.y());
+    vec.set__yaw(aVel.z());
+    cmd.set__data(vec);
+
+    RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvControllerCommand>("abv/controller/command", cmd);
+}
+
+void StateMachine::sendDockCommand(std::uint8_t aCode)
+{
+    abv_msgs::msg::DockCommand cmd;
+    cmd.stamp = rclcpp::Clock(RCL_SYSTEM_TIME).now();
+    cmd.command = aCode;
+    LOGI << "Dock command " << static_cast<int>(aCode)
+         << " (1=ARM 2=DISARM 3=LOCK 4=UNLOCK), link " << (mDockLinkOk.get() ? "OK" : "DOWN");
+    RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::DockCommand>("abv/dock/cmd", cmd);
+}
+
+double StateMachine::stepElapsed_s() const
+{
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - mStepStart).count();
+}
+
+bool StateMachine::isTimedStepComplete()
+{
+    const double elapsed = stepElapsed_s();
+    const double limit = mCurrentWaypoint.mTimeout > 0.0
+        ? mCurrentWaypoint.mTimeout
+        : ConfigurationManager::getInstance()->getGuidanceConfig().mWaypointTimeout;
+
+    if(mCurrentWaypoint.mType == WaypointType::APPROACH)
+    {
+        Eigen::Vector3d pose = mNavSource.getCurrentPose();
+        double gap = DockingGeometry::faceGap(mDockingConfig, pose.x(), pose.y(), pose.z());
+
+        if(mDockLocked.get() && mDockLinkOk.get())
+        {
+            LOGI << "Approach " << mApproachCount << " result: CAPTURED after " << elapsed
+                 << " s, face gap " << gap << " m";
+            return true;
+        }
+        if(gap <= mDockingConfig.mCaptureRange)
+        {
+            LOGW << "Approach " << mApproachCount << " result: NO LOCK at capture range after " << elapsed
+                 << " s, face gap " << gap << " m";
+            return true;
+        }
+        if(elapsed >= limit)
+        {
+            LOGW << "Approach " << mApproachCount << " result: TIMED OUT after " << elapsed
+                 << " s, face gap " << gap << " m";
+            return true;
+        }
+        return false;
+    }
+
+    // VELOCITY and HOLD just run for their duration
+    return elapsed >= limit;
+}
+
+void StateMachine::finishStep()
+{
+    if(mPathGenerator->hasNext())
+    {
+        setActiveState(States::SEND_WAYPOINT);
+    }
+    else
+    {
+        mWatchdog.cancel();
+        setActiveState(States::IDLE);
+    }
+}
+
+void StateMachine::dockStatusCallback(abv_msgs::msg::DockStatus::SharedPtr aStatus)
+{
+    mDockLocked.set(aStatus->locked);
+    mDockLinkOk.set(aStatus->link_ok);
 }

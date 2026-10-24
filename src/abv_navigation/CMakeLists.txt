@@ -22,6 +22,7 @@ set(SOURCES
 	src/RosStatePublisher.cpp
 	src/SimulatedStateFetcher.cpp
 	src/VehicleStateTracker.cpp
+	src/VelocityAlertMonitor.cpp
 	src/main.cpp
 )
 

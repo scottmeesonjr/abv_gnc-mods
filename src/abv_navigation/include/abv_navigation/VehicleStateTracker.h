@@ -10,6 +10,7 @@
 #include "abv_common/ConfigurationManager.h"
 #include "abv_common/ConsumableBuffer.hpp"
 #include "RosStatePublisher.h"
+#include "VelocityAlertMonitor.h"
 #include "ExtendedKalmanFilter.h"
 
 #include "abv_msgs/msg/abv_thruster_status.hpp"
@@ -46,6 +47,7 @@ private:
     // polymorphic state fetcher interface so we arent tied to optiTrack
     std::shared_ptr<IStateFetcher> mStateFetcher; // state fetcher interface class 
     RosStatePublisher mStatePublisher; 
+    VelocityAlertMonitor mAlertMonitor; // SYS.01 velocity alert, published on abv/nav/alert
     NavigationConfig mConfig; 
 
     // TODO: add subscription to ControllerStatus, pass latest input to EKF

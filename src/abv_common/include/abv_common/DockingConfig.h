@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cmath>
 #include <string>
 
 // Docking campaign parameters, parsed from the Docking: block of config.yaml.
@@ -43,3 +44,60 @@ struct DockingConfig
     // s, DockStatus.link_ok goes false if no status line arrives within this time.
     double mStatusTimeout = 0.5;
 };
+
+// Docking geometry shared by navigation (velocity alert) and guidance
+// (standoff poses, approach velocity, stop-at-capture-range check).
+//
+// Conventions:
+//   n = (cos(psi), sin(psi)) is the passive face's outward normal (psi = TargetPose[2]).
+//   t = (-sin(psi), cos(psi)) is the lateral direction across the face.
+//   The ABV's active face sits PortOffset ahead of its center along its +x body axis,
+//   so a perfectly aligned ABV points at yaw psi + pi.
+namespace DockingGeometry
+{
+    inline double wrapAngle(double aAngle)
+    {
+        return std::atan2(std::sin(aAngle), std::cos(aAngle));
+    }
+
+    // m, gap between the ABV's active face and the passive face, measured along n.
+    // Positive = still apart, ~0 = contact, negative = past the face plane.
+    inline double faceGap(const DockingConfig& aCfg, double aX, double aY, double aYaw)
+    {
+        const double psi = aCfg.mTargetPose[2];
+        const double faceX = aX + aCfg.mPortOffset * std::cos(aYaw);
+        const double faceY = aY + aCfg.mPortOffset * std::sin(aYaw);
+        return (faceX - aCfg.mTargetPose[0]) * std::cos(psi) +
+               (faceY - aCfg.mTargetPose[1]) * std::sin(psi);
+    }
+
+    // m/s, velocity along the docking axis. Positive = moving toward the target.
+    inline double closingVelocity(const DockingConfig& aCfg, double aVx, double aVy)
+    {
+        const double psi = aCfg.mTargetPose[2];
+        return -(aVx * std::cos(psi) + aVy * std::sin(psi));
+    }
+
+    // [x, y, yaw] of the ABV center when its face is aGap from the target face,
+    // shifted aRadialOffset (m) along t and rotated aAngularOffset (rad).
+    // aGap = StandoffDistance gives the standoff pose; aGap = 0 gives the contact pose.
+    inline std::array<double, 3> chaserPoseAtGap(const DockingConfig& aCfg, double aGap,
+                                                 double aRadialOffset = 0.0,
+                                                 double aAngularOffset = 0.0)
+    {
+        const double psi = aCfg.mTargetPose[2];
+        const double nx = std::cos(psi), ny = std::sin(psi);
+        const double tx = -ny, ty = nx;
+        const double along = aGap + aCfg.mPortOffset;
+        return {aCfg.mTargetPose[0] + nx * along + tx * aRadialOffset,
+                aCfg.mTargetPose[1] + ny * along + ty * aRadialOffset,
+                wrapAngle(psi + M_PI + aAngularOffset)};
+    }
+
+    // [vx, vy] in the table frame for a pure axial approach at aSpeed (m/s).
+    inline std::array<double, 2> approachVelocity(const DockingConfig& aCfg, double aSpeed)
+    {
+        const double psi = aCfg.mTargetPose[2];
+        return {-aSpeed * std::cos(psi), -aSpeed * std::sin(psi)};
+    }
+}

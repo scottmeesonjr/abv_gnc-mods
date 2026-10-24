@@ -1,0 +1,13 @@
+# PreviewLength: 3
+# Example docking run written by hand (same steps the "dock" command builds).
+# Rows: pose,x,y,yaw[,timeout][,tolX,tolY,tolYaw] | vel,vx,vy,wz,duration
+#       approach[,timeout] | hold,duration | arm | disarm | lock | unlock
+# Standoff pose below matches the sim placeholder TargetPose [3.4, 0.9, 3.14159].
+pose,2.6,0.9,0,30,0.015,0.015,0.017
+arm
+approach,30
+hold,5
+unlock
+hold,1
+pose,2.6,0.9,0
+disarm

@@ -143,6 +143,7 @@ void VehicleStateTracker::stateTrackerLoop()
         }
 
         mStatePublisher.publish(stateToPublish, mLastMeasurementTime, mIsNavValid);
+        mAlertMonitor.update(stateToPublish, mIsNavValid);
         DataLogger::get().write(logId, toVector(stateEstimate));
 
         rate.block();

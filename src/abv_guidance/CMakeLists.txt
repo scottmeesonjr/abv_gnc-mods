@@ -10,6 +10,7 @@ find_package(plog REQUIRED)
 
 set(ABV_GUIDANCE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/CollisionAvoidPathGenerator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/CyclicDockGenerator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/FromFileGenerator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/PathWatchdog.cpp
