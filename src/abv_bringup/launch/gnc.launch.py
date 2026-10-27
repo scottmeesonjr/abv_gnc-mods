@@ -13,6 +13,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('sim', default_value='false'),
+        DeclareLaunchArgument('rl', default_value='false'),
 
         Node(
             package='abv_goal_manager',
@@ -69,6 +70,7 @@ def generate_launch_description():
             name='rl_policy_node',
             output='screen',
             emulate_tty=True,
+            condition=IfCondition(LaunchConfiguration('rl')),
         ),
 
         GroupAction(
