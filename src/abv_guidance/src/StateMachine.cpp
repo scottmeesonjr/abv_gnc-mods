@@ -200,6 +200,7 @@ void StateMachine::sendWaypoint()
         }
         sendVelocityCommand(wp.mVel);
         mStepStart = std::chrono::steady_clock::now();
+        mReachedCaptureRange = false;
         setActiveState(States::WAITING_FOR_ARRIVAL);
         return;
     }
@@ -404,10 +405,14 @@ void StateMachine::onWaypointTimeout()
     }
     else
     {
-        LOGW << "Not within relaxed arrival bounds, aborting path...";
+        LOGW << "Not within relaxed arrival bounds, aborting path. Pose error [x, y, yaw]: "
+             << error.transpose() << ", relaxed tolerance: " << relaxedTol.transpose();
 
         mWatchdog.cancel();
-        sendStopCommand();
+        // Brake to zero velocity rather than STOP: STOP only switches the
+        // thrusters off, and on a frictionless table the vehicle would keep
+        // drifting at whatever speed it had when the path was abandoned.
+        sendVelocityCommand(Eigen::Vector3d::Zero());
         setActiveState(States::IDLE);
     }
 }
@@ -535,17 +540,44 @@ bool StateMachine::isTimedStepComplete()
         Eigen::Vector3d vel = mNavSource.getCurrentVel();
         double gap = DockingGeometry::faceGap(mDockingConfig, pose.x(), pose.y(), pose.z());
 
+        // s, how long to keep pressing in at approach speed once the faces are
+        // within CaptureRange, giving the mechanism time to latch
+        constexpr double kContactWait_s = 1.5;
+        // m, gap past the target face that means something is wrong (target
+        // missing, or nav error) - stop immediately rather than keep driving
+        constexpr double kOvertravel_m = -0.03;
+
         if(mDockLocked.get() && mDockLinkOk.get())
         {
             LOGI << "Approach " << mApproachCount << " result: CAPTURED after " << elapsed
-                 << " s, face gap " << gap << " m, speed " << std::hypot(vel.x(), vel.y()) << " m/s";
+                 << " s, face gap " << gap << " m, speed at lock " << std::hypot(vel.x(), vel.y()) << " m/s";
+            return true;
+        }
+        if(gap <= kOvertravel_m)
+        {
+            LOGW << "Approach " << mApproachCount << " result: NO LOCK, overtravel past the target face ("
+                 << gap << " m) after " << elapsed << " s";
             return true;
         }
         if(gap <= mDockingConfig.mCaptureRange)
         {
-            LOGW << "Approach " << mApproachCount << " result: NO LOCK at capture range after " << elapsed
-                 << " s, face gap " << gap << " m";
-            return true;
+            // Keep driving in: capture happens at contact (gap 0), not at the
+            // edge of the capture range. Only give up if no lock arrives soon.
+            if(!mReachedCaptureRange)
+            {
+                mReachedCaptureRange = true;
+                mCaptureRangeReachedAt = std::chrono::steady_clock::now();
+                LOGI << "Approach " << mApproachCount << " within capture range at "
+                     << std::hypot(vel.x(), vel.y()) << " m/s, waiting for lock";
+            }
+            double waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - mCaptureRangeReachedAt).count();
+            if(waited >= kContactWait_s)
+            {
+                LOGW << "Approach " << mApproachCount << " result: NO LOCK after " << waited
+                     << " s in contact, face gap " << gap << " m";
+                return true;
+            }
+            return false;
         }
         if(elapsed >= limit)
         {

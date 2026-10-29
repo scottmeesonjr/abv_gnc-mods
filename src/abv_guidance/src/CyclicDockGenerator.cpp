@@ -18,6 +18,11 @@ namespace
     // approach always starts from rest even if the standoff was only reached
     // within the relaxed (timed-out) tolerance while still drifting
     constexpr double kStandoffSettle_s = 3.0;
+
+    // s, time allowed to reach the standoff point. With ~0.2 N of thrust on a
+    // 12.7 kg vehicle, crossing the table and settling inside the tight
+    // StartTolerance takes well over the 30 s default waypoint timeout.
+    constexpr double kStandoffTimeout_s = 120.0;
 }
 
 CyclicDockGenerator::CyclicDockGenerator(double aRadialOffset, double aAngularOffset, const Scene& aScene) :
@@ -62,7 +67,7 @@ bool CyclicDockGenerator::init()
     }
 
     Eigen::Vector3d startTol(mConfig.mStartTolerance[0], mConfig.mStartTolerance[1], mConfig.mStartTolerance[2]);
-    Waypoint standoffWp(standoff[0], standoff[1], standoff[2], WaypointType::POSE, -1.0, startTol);
+    Waypoint standoffWp(standoff[0], standoff[1], standoff[2], WaypointType::POSE, kStandoffTimeout_s, startTol);
 
     for (int cycle = 0; cycle < mConfig.mCycles; cycle++)
     {

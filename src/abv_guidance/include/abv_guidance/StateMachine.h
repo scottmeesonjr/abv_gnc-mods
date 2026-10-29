@@ -85,6 +85,10 @@ private:
     std::chrono::steady_clock::time_point mStepStart;
     int mApproachCount;
 
+    // approach: set once the face gap first drops inside Docking.CaptureRange
+    bool mReachedCaptureRange = false;
+    std::chrono::steady_clock::time_point mCaptureRangeReachedAt;
+
 private: 
     void startup(); 
     void generatePath(); 
