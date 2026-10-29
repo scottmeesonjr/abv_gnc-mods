@@ -1,6 +1,7 @@
 #ifndef VEHICLESIMULATOR_H
 #define VEHICLESIMULATOR_H
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <deque>
@@ -9,6 +10,9 @@
 #include <eigen3/Eigen/Dense>
 
 #include "abv_msgs/msg/abv_state.hpp"
+#include "abv_msgs/msg/dock_command.hpp"
+#include "abv_msgs/msg/dock_status.hpp"
+#include "abv_common/Configurations.h"
 #include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "OptitrackEmulator.h"
 #include "UdpServer.h"
@@ -110,6 +114,22 @@ private:
     void addSensorNoise(); 
     void addProcessNoise(); 
     void makeMeasurement(VehicleState& aStateToAlter);
+
+    // ---- Docking target stand-in (Docking.SimulateContact) ----
+    // A solid face at Docking.TargetPose plus a fake mechanism: ARM, lock on
+    // contact while armed, hold rigid while locked, release on UNLOCK.
+    // Publishes abv/dock/status the way abv_dock_bridge will on hardware.
+    DockingConfig mDockConfig;
+    bool mSimulateContact;
+    std::atomic<bool> mDockArmed{false};
+    std::atomic<bool> mDockLocked{false};
+    std::atomic<int> mDockCycles{0};
+    int mDockStatusTick{0};
+    std::atomic<bool> mInContact{false};
+
+    void dockCommandCallback(abv_msgs::msg::DockCommand::SharedPtr aMsg);
+    void applyDockingContact();
+    void publishDockStatus();
 };
 #endif //VEHICLESIMULATOR_H
 

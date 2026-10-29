@@ -117,10 +117,17 @@ struct ControlLawConfig
     // are added, without needing a new node.
     std::string mLawType;
 
-    // PID controller gains
+    // PID controller gains for POSE goals (ControlLaw.Pid)
     Eigen::Vector3d mKp;
     Eigen::Vector3d mKi;
     Eigen::Vector3d mKd;
+
+    // PID controller gains for VELOCITY goals (ControlLaw.VelocityPid).
+    // Separate because the pose gains (especially the large Kd) act on
+    // acceleration when applied to a velocity error, which cancels thrust.
+    Eigen::Vector3d mVelKp = Eigen::Vector3d(50.0, 50.0, 10.0);
+    Eigen::Vector3d mVelKi = Eigen::Vector3d::Zero();
+    Eigen::Vector3d mVelKd = Eigen::Vector3d::Zero();
 };
 
 struct ThrusterConfig

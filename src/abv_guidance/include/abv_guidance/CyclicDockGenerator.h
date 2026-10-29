@@ -11,12 +11,13 @@
 // and timing in config.yaml's Docking block. Each cycle:
 //
 //   1. pose      drive to the standoff point (tight StartTolerance)
-//   2. arm       tell the mechanism to get ready for capture
-//   3. approach  creep straight in at ApproachVelocity, no lateral correction;
+//   2. hold      3 s at zero velocity so the approach starts from rest
+//   3. arm       tell the mechanism to get ready for capture
+//   4. approach  creep straight in at ApproachVelocity, no lateral correction;
 //                ends on lock, at CaptureRange, or after ApproachTimeout
-//   4. hold      stop thrusting and stay docked for DwellTime
-//   5. unlock    release
-//   6. hold      short pause so the latch opens before backing off
+//   5. hold      hold zero velocity and stay docked for DwellTime
+//   6. unlock    release
+//   7. hold      short pause so the latch opens before backing off
 //
 // After the last cycle it backs off to the standoff point and disarms.
 //

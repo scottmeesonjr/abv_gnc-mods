@@ -43,6 +43,16 @@ struct DockingConfig
 
     // s, DockStatus.link_ok goes false if no status line arrives within this time.
     double mStatusTimeout = 0.5;
+
+    // abv_simulator only: put a solid target face at TargetPose and fake the
+    // mechanism (ARM / lock on contact / UNLOCK) on abv/dock/status, so docking
+    // runs can be tested end to end in sim. Ignored on the real vehicle.
+    bool mSimulateContact = false;
+
+    // m, half the width of the passive face. The sim only treats the vehicle
+    // as touching the target when its face center is within this distance of
+    // the target center sideways.
+    double mTargetHalfWidth = 0.15;
 };
 
 // Docking geometry shared by navigation (velocity alert) and guidance
@@ -69,6 +79,17 @@ namespace DockingGeometry
         const double faceY = aY + aCfg.mPortOffset * std::sin(aYaw);
         return (faceX - aCfg.mTargetPose[0]) * std::cos(psi) +
                (faceY - aCfg.mTargetPose[1]) * std::sin(psi);
+    }
+
+    // m, sideways offset of the ABV's active face center from the target center,
+    // measured along t. Used by the sim to decide whether the faces overlap.
+    inline double faceLateralOffset(const DockingConfig& aCfg, double aX, double aY, double aYaw)
+    {
+        const double psi = aCfg.mTargetPose[2];
+        const double faceX = aX + aCfg.mPortOffset * std::cos(aYaw);
+        const double faceY = aY + aCfg.mPortOffset * std::sin(aYaw);
+        return (faceX - aCfg.mTargetPose[0]) * -std::sin(psi) +
+               (faceY - aCfg.mTargetPose[1]) * std::cos(psi);
     }
 
     // m/s, velocity along the docking axis. Positive = moving toward the target.

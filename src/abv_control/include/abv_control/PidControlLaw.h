@@ -22,8 +22,14 @@ private:
     Eigen::Vector3d mPrevPoseError;
     Eigen::Vector3d mPoseErrorIntegral;
 
+    // Pose and velocity goals use separate gains (ControlLaw.Pid vs
+    // ControlLaw.VelocityPid). The error being fed in has different units in
+    // each mode, so the derivative/integral state is reset whenever the goal
+    // type changes to keep one mode's history from kicking the other.
+    GoalType mLastGoalType;
 
-    Eigen::Vector3d PID(Eigen::Vector3d aPoseError);
+    Eigen::Vector3d PID(Eigen::Vector3d aPoseError, const Eigen::Vector3d& aKp,
+                        const Eigen::Vector3d& aKi, const Eigen::Vector3d& aKd);
 
 };
 #endif //PIDCONTROLLAW_H

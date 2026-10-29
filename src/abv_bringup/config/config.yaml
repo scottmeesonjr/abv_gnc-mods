@@ -34,10 +34,12 @@ Docking:
   CaptureRange: 0.01 # m, stop if gap below this and no lock
   StartTolerance: [0.015, 0.015, 0.017] # m, m, rad (TEST.10/11)
   DwellTime: 5.0 # s docked before UNLOCK
-  Cycles: 2 # SYS.02 = 10-20
+  Cycles: 2 # SYS.02 target is 20; 2 keeps sim tests short. Real tests: ~3 per nitrogen tank
   SerialPort: /dev/ttyACM0
   BaudRate: 115200
   StatusTimeout: 0.5 # s
+  SimulateContact: true # abv_simulator only: solid target face + fake lock. No effect on the real vehicle
+  TargetHalfWidth: 0.15 # m, half width of the passive face (sim contact check)
 
 Control:
   StateMachine:
@@ -63,10 +65,15 @@ Control:
 ControlLaw:
   Law: PID # which IControlLaw abv_control instantiates: PID today, room for LQR | MPC later
 
-  Pid:
+  Pid: # pose goals
     Kp: [25.0, 25.0, 5.0]
     Ki: [0, 0, 0]
     Kd: [155.0, 155.0, 15.0]
+
+  VelocityPid: # velocity goals (docking approach, braking). Kd must stay ~0: it acts on acceleration here
+    Kp: [50.0, 50.0, 10.0]
+    Ki: [0, 0, 0]
+    Kd: [0, 0, 0]
 
 # Consumed by abv_thrusters.
 Thrusters:

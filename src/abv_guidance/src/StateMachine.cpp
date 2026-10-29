@@ -185,8 +185,14 @@ void StateMachine::sendWaypoint()
         if(wp.mType == WaypointType::APPROACH)
         {
             mApproachCount++;
-            LOGI << "Approach " << mApproachCount << " starting at "
-                 << std::hypot(wp.mVel.x(), wp.mVel.y()) << " m/s";
+            Eigen::Vector3d pose = mNavSource.getCurrentPose();
+            Eigen::Vector3d vel = mNavSource.getCurrentVel();
+            LOGI << "Approach " << mApproachCount << " starting: commanded "
+                 << std::hypot(wp.mVel.x(), wp.mVel.y()) << " m/s, current speed "
+                 << std::hypot(vel.x(), vel.y()) << " m/s, face gap "
+                 << DockingGeometry::faceGap(mDockingConfig, pose.x(), pose.y(), pose.z())
+                 << " m, lateral offset "
+                 << DockingGeometry::faceLateralOffset(mDockingConfig, pose.x(), pose.y(), pose.z()) << " m";
             if(mDockLocked.get())
             {
                 LOGW << "Mechanism already reports LOCKED at the start of the approach - check that the last unlock worked";
@@ -199,8 +205,10 @@ void StateMachine::sendWaypoint()
     }
     else if(wp.mType == WaypointType::HOLD)
     {
+        // actively hold zero velocity. STOP only switches the thrusters off,
+        // which on a frictionless table lets the vehicle keep coasting.
         LOGV << "Holding for " << wp.mTimeout << " s";
-        sendStopCommand();
+        sendVelocityCommand(Eigen::Vector3d::Zero());
         mStepStart = std::chrono::steady_clock::now();
         setActiveState(States::WAITING_FOR_ARRIVAL);
         return;
@@ -272,7 +280,8 @@ void StateMachine::waitForArrival()
         {
             if(mCurrentWaypoint.mType != WaypointType::HOLD)
             {
-                sendStopCommand();
+                // brake to zero velocity (STOP alone would let it coast)
+                sendVelocityCommand(Eigen::Vector3d::Zero());
             }
             finishStep();
         }
@@ -523,12 +532,13 @@ bool StateMachine::isTimedStepComplete()
     if(mCurrentWaypoint.mType == WaypointType::APPROACH)
     {
         Eigen::Vector3d pose = mNavSource.getCurrentPose();
+        Eigen::Vector3d vel = mNavSource.getCurrentVel();
         double gap = DockingGeometry::faceGap(mDockingConfig, pose.x(), pose.y(), pose.z());
 
         if(mDockLocked.get() && mDockLinkOk.get())
         {
             LOGI << "Approach " << mApproachCount << " result: CAPTURED after " << elapsed
-                 << " s, face gap " << gap << " m";
+                 << " s, face gap " << gap << " m, speed " << std::hypot(vel.x(), vel.y()) << " m/s";
             return true;
         }
         if(gap <= mDockingConfig.mCaptureRange)

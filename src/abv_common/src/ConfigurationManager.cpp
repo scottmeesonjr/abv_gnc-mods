@@ -139,6 +139,20 @@ void ConfigurationManager::parseControlLawConfig(const YAML::Node& aNode)
     mControlLawConfig.mKp = ConfigUtils::parseVector3d(aNode["Pid"]["Kp"]);
     mControlLawConfig.mKi = ConfigUtils::parseVector3d(aNode["Pid"]["Ki"]);
     mControlLawConfig.mKd = ConfigUtils::parseVector3d(aNode["Pid"]["Kd"]);
+
+    // Velocity-goal gains. Optional: if the block is missing, the defaults in
+    // ControlLawConfig are used (pose gains are NOT reused - see Configurations.h).
+    YAML::Node velNode = aNode["VelocityPid"];
+    if (velNode)
+    {
+        if (velNode["Kp"]) mControlLawConfig.mVelKp = ConfigUtils::parseVector3d(velNode["Kp"]);
+        if (velNode["Ki"]) mControlLawConfig.mVelKi = ConfigUtils::parseVector3d(velNode["Ki"]);
+        if (velNode["Kd"]) mControlLawConfig.mVelKd = ConfigUtils::parseVector3d(velNode["Kd"]);
+    }
+    else
+    {
+        LOGW << "No ControlLaw.VelocityPid block in config.yaml, using default velocity gains";
+    }
 }
 
 void ConfigurationManager::parseThrusterConfig(const YAML::Node& aNode)
@@ -219,6 +233,8 @@ void ConfigurationManager::parseDockingConfig(const YAML::Node& aNode)
     c.mSerialPort = aNode["SerialPort"].as<std::string>(c.mSerialPort);
     c.mBaudRate = aNode["BaudRate"].as<int>(c.mBaudRate);
     c.mStatusTimeout = aNode["StatusTimeout"].as<double>(c.mStatusTimeout);
+    c.mSimulateContact = aNode["SimulateContact"].as<bool>(c.mSimulateContact);
+    c.mTargetHalfWidth = aNode["TargetHalfWidth"].as<double>(c.mTargetHalfWidth);
 
     // Warn only, so you can still deliberately run outside the band (e.g. to trip the alert).
     if (c.mApproachVelocity < 0.05 || c.mApproachVelocity > 0.10)
@@ -231,6 +247,3 @@ void ConfigurationManager::parseDockingConfig(const YAML::Node& aNode)
         throw std::runtime_error("Docking.StandoffDistance must be greater than CaptureRange");
     }
 }
-
-
-

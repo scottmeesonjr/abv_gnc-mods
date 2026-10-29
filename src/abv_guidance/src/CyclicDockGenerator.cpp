@@ -13,6 +13,11 @@ namespace
 {
     // s, pause after UNLOCK so the latch is open before the vehicle backs off
     constexpr double kReleaseSettle_s = 1.0;
+
+    // s, zero-velocity hold at the standoff point before each approach, so the
+    // approach always starts from rest even if the standoff was only reached
+    // within the relaxed (timed-out) tolerance while still drifting
+    constexpr double kStandoffSettle_s = 3.0;
 }
 
 CyclicDockGenerator::CyclicDockGenerator(double aRadialOffset, double aAngularOffset, const Scene& aScene) :
@@ -62,6 +67,7 @@ bool CyclicDockGenerator::init()
     for (int cycle = 0; cycle < mConfig.mCycles; cycle++)
     {
         mPath.push_back(standoffWp);
+        mPath.push_back(Waypoint::hold(kStandoffSettle_s));
         mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_ARM));
         mPath.push_back(Waypoint::approach(vel[0], vel[1], mConfig.mApproachTimeout,
                                            Eigen::Vector3d(contact[0], contact[1], contact[2])));
@@ -99,5 +105,5 @@ std::vector<Waypoint> CyclicDockGenerator::getPath() const
 std::size_t CyclicDockGenerator::getPathPreviewLength() const
 {
     // one cycle's worth of steps is enough to show the standoff and contact points
-    return 7;
+    return 8;
 }
