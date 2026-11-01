@@ -28,6 +28,7 @@ set(AUTOMOC_HDRS
   include/abv_gui/TableTopView.h
   include/abv_gui/PolicySelectorPanel.h
   include/abv_gui/ActivePolicyBanner.h
+  include/abv_gui/DockPanel.h
 )
 
 set(SOURCES
@@ -40,6 +41,7 @@ set(SOURCES
   src/TableTopView.cpp
   src/PolicySelectorPanel.cpp
   src/ActivePolicyBanner.cpp
+  src/DockPanel.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${AUTOMOC_HDRS})

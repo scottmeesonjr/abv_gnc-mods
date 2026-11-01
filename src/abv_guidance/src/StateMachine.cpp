@@ -139,9 +139,11 @@ void StateMachine::generatePath()
     }
     else if("dock" == mCommand.mType || "Dock" == mCommand.mType)
     {
-        // goal x = radial offset (m), goal yaw = angular offset (rad); see CyclicDockGenerator.h
+        // goal x = radial offset (m), goal y = approach speed (m/s, 0 = config),
+        // goal yaw = angular offset (rad); see CyclicDockGenerator.h
         mApproachCount = 0;
-        auto pathGen = std::make_unique<CyclicDockGenerator>(mCommand.mGoal.mPose.x(), mCommand.mGoal.mPose.z(), mScene);
+        auto pathGen = std::make_unique<CyclicDockGenerator>(mCommand.mGoal.mPose.x(), mCommand.mGoal.mPose.z(),
+                                                             mCommand.mGoal.mPose.y(), mScene);
         mPathGenerator = std::move(pathGen);
     }
     else

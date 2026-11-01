@@ -8,6 +8,8 @@
 #include "abv_msgs/msg/abv_controller_command.hpp"
 #include "abv_msgs/msg/abv_thruster_status.hpp"
 #include "abv_msgs/msg/abv_path.hpp"
+#include "abv_msgs/msg/dock_status.hpp"
+#include "abv_msgs/msg/nav_alert.hpp"
 
 // outgoing types
 #include <QVector>
@@ -66,6 +68,30 @@ namespace conversions
             path.push_back(QPointF(wp.x, wp.y));
         }
         return path;
+    }
+
+    inline QVector<double>
+    dockStatusConvertor(const abv_msgs::msg::DockStatus& msg)
+    {
+        return QVector<double> {
+            static_cast<double>(msg.state),
+            msg.locked ? 1.0 : 0.0,
+            msg.link_ok ? 1.0 : 0.0,
+            msg.estop ? 1.0 : 0.0,
+            static_cast<double>(msg.cycle_count),
+            static_cast<double>(msg.fault_code)
+        };
+    }
+
+    inline QVector<double>
+    navAlertConvertor(const abv_msgs::msg::NavAlert& msg)
+    {
+        return QVector<double> {
+            msg.speed,
+            msg.closing_velocity,
+            msg.range,
+            msg.alert ? 1.0 : 0.0
+        };
     }
 
 } // namespace topic

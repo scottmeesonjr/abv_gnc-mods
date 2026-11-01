@@ -1,6 +1,8 @@
 
 #include "abv_common/RosTopicManager.h"
 #include "abv_commander/CommanderComms.h"
+#include "abv_msgs/msg/dock_command.hpp"
+#include "std_msgs/msg/string.hpp"
 
 CommanderComms::CommanderComms()
 {
@@ -18,6 +20,8 @@ bool CommanderComms::start()
 
     topicManager->createPublisher<abv_msgs::msg::AbvControllerCommand>("abv/controller/command");
     topicManager->createPublisher<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command"); 
+    topicManager->createPublisher<abv_msgs::msg::DockCommand>("abv/dock/cmd");
+    topicManager->createPublisher<std_msgs::msg::String>("abv/test/condition");
     
     topicManager->spinNode(); 
 
@@ -27,4 +31,5 @@ bool CommanderComms::start()
 bool CommanderComms::stop()
 {
     rclcpp::shutdown(); 
+    return true;
 }

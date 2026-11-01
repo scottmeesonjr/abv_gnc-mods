@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, GroupAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackagePrefix
 
@@ -14,6 +14,9 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('sim', default_value='false'),
         DeclareLaunchArgument('rl', default_value='false'),
+        # static roll (deg) the passive half is mounted at, copied into every
+        # docking log row (SYS.09 runs), e.g. fixture_roll_deg:=4.0
+        DeclareLaunchArgument('fixture_roll_deg', default_value='0.0'),
 
         Node(
             package='abv_goal_manager',
@@ -71,6 +74,27 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             condition=IfCondition(LaunchConfiguration('rl')),
+        ),
+
+        # Per-cycle docking log (TEST.09), sim and hardware alike
+        Node(
+            package='abv_dock_bridge',
+            executable='dock_logger',
+            name='abv_dock_logger',
+            output='screen',
+            emulate_tty=True,
+            parameters=[{'fixture_roll_deg': LaunchConfiguration('fixture_roll_deg')}],
+        ),
+
+        # Real vehicle only: serial link to the docking mechanism Arduino.
+        # In sim, abv_simulator stands in for the mechanism.
+        Node(
+            package='abv_dock_bridge',
+            executable='dock_bridge',
+            name='abv_dock_bridge',
+            output='screen',
+            emulate_tty=True,
+            condition=UnlessCondition(LaunchConfiguration('sim')),
         ),
 
         GroupAction(

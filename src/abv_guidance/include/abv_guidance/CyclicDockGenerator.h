@@ -21,13 +21,16 @@
 //
 // After the last cycle it backs off to the standoff point and disarms.
 //
-// Test offsets come from the "dock" command's goal: goal x = radial offset (m,
-// across the docking axis), goal yaw = angular offset (rad). goal y is unused.
-// A zero goal gives a nominal (centered, aligned) run.
+// Test settings come from the "dock" command's goal:
+//   goal x   = radial offset (m, across the docking axis)        SYS.07 / TEST.04A
+//   goal yaw = angular offset (rad)                               SYS.08 / TEST.04B
+//   goal y   = approach speed (m/s); 0 = Docking.ApproachVelocity  SYS.10 / TEST.04C
+// A zero goal gives a nominal (centered, aligned, config-speed) run.
 class CyclicDockGenerator : public IPathGenerator
 {
 public:
-    CyclicDockGenerator(double aRadialOffset, double aAngularOffset, const Scene& aScene);
+    CyclicDockGenerator(double aRadialOffset, double aAngularOffset, double aApproachSpeed,
+                        const Scene& aScene);
     ~CyclicDockGenerator() override;
 
     bool init() override;
@@ -39,6 +42,7 @@ public:
 private:
     double mRadialOffset;
     double mAngularOffset;
+    double mApproachSpeed;
     const Scene& mScene;
     DockingConfig mConfig;
 

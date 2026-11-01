@@ -43,6 +43,7 @@
 #include "abv_gui/TableTopView.h"
 #include "abv_gui/PolicySelectorPanel.h"
 #include "abv_gui/ActivePolicyBanner.h"
+#include "abv_gui/DockPanel.h"
 
 int main(int argc, char *argv[])
 {
@@ -118,6 +119,22 @@ int main(int argc, char *argv[])
 
     StatusPanel* status = new StatusPanel();
     rightLayout->addWidget(status);
+
+    // Docking mechanism + SYS.01 velocity alert
+    auto* dockPanel = new DockPanel();
+    rightLayout->addWidget(dockPanel);
+
+    auto* dockStatusAdapter =
+        new TopicAdapter<abv_msgs::msg::DockStatus, QVector<double>>(
+            "abv/dock/status", &conversions::dockStatusConvertor);
+    QObject::connect(dockStatusAdapter, &TopicAdapterBase::newDataVariant,
+                      dockPanel, &DockPanel::onDockStatus);
+
+    auto* navAlertAdapter =
+        new TopicAdapter<abv_msgs::msg::NavAlert, QVector<double>>(
+            "abv/nav/alert", &conversions::navAlertConvertor);
+    QObject::connect(navAlertAdapter, &TopicAdapterBase::newDataVariant,
+                      dockPanel, &DockPanel::onNavAlert);
 
     PolicySelectorPanel* policyPanel = new PolicySelectorPanel();
     rightLayout->addWidget(policyPanel);

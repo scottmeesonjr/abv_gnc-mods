@@ -80,6 +80,14 @@ private:
     QComboBox*      mPathType{nullptr};
     QDoubleSpinBox* mPathDuration{nullptr};
 
+    // Dock path options (shown only when Path Type is "Dock"). Sent in the
+    // guidance command's goal: x = radial (m), y = speed (m/s, 0 = config),
+    // yaw = angular offset (rad). See CyclicDockGenerator.h.
+    QWidget*        mDockOptions{nullptr};
+    QDoubleSpinBox* mDockRadial{nullptr};
+    QDoubleSpinBox* mDockAngleDeg{nullptr};
+    QDoubleSpinBox* mDockSpeed{nullptr};
+
     QCheckBox*      mBodyFrameCheckbox{nullptr};
 
     rclcpp::TimerBase::SharedPtr mFireTimer{nullptr};

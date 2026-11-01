@@ -25,10 +25,12 @@ namespace
     constexpr double kStandoffTimeout_s = 120.0;
 }
 
-CyclicDockGenerator::CyclicDockGenerator(double aRadialOffset, double aAngularOffset, const Scene& aScene) :
+CyclicDockGenerator::CyclicDockGenerator(double aRadialOffset, double aAngularOffset, double aApproachSpeed,
+                                         const Scene& aScene) :
     mRadialOffset(aRadialOffset), mAngularOffset(aAngularOffset), mScene(aScene), mIndex(0)
 {
     mConfig = ConfigurationManager::getInstance()->getDockingConfig();
+    mApproachSpeed = (aApproachSpeed > 0.0) ? aApproachSpeed : mConfig.mApproachVelocity;
 }
 
 CyclicDockGenerator::~CyclicDockGenerator()
@@ -41,6 +43,20 @@ bool CyclicDockGenerator::init()
     mPath.clear();
     mIndex = 0;
 
+    // m/s, hard ceiling on a commanded approach speed. Runs above the 0.10 m/s
+    // band are allowed (to exercise the 0.125 m/s alert) but not wildly so.
+    constexpr double kMaxApproachSpeed = 0.15;
+    if (mApproachSpeed > kMaxApproachSpeed)
+    {
+        LOGE << "Approach speed " << mApproachSpeed << " m/s is above the " << kMaxApproachSpeed
+             << " m/s safety ceiling, refusing the run";
+        return false;
+    }
+    if (mApproachSpeed < 0.05 || mApproachSpeed > 0.10)
+    {
+        LOGW << "Approach speed " << mApproachSpeed << " m/s is outside the SYS.10 band (0.05-0.10 m/s)";
+    }
+
     if (mConfig.mCycles < 1)
     {
         LOGW << "Docking.Cycles is " << mConfig.mCycles << ", nothing to run";
@@ -50,7 +66,7 @@ bool CyclicDockGenerator::init()
     auto standoff = DockingGeometry::chaserPoseAtGap(mConfig, mConfig.mStandoffDistance,
                                                      mRadialOffset, mAngularOffset);
     auto contact = DockingGeometry::chaserPoseAtGap(mConfig, 0.0, mRadialOffset, mAngularOffset);
-    auto vel = DockingGeometry::approachVelocity(mConfig, mConfig.mApproachVelocity);
+    auto vel = DockingGeometry::approachVelocity(mConfig, mApproachSpeed);
 
     // Refuse to run if the standoff point would put the vehicle off the table.
     // This also catches a TargetPose that was never filled in.
@@ -88,7 +104,7 @@ bool CyclicDockGenerator::init()
     LOGI << "Docking run: " << mConfig.mCycles << " cycles, radial offset " << mRadialOffset
          << " m, angular offset " << mAngularOffset << " rad, standoff ("
          << standoff[0] << ", " << standoff[1] << ", " << standoff[2] << "), approach "
-         << mConfig.mApproachVelocity << " m/s";
+         << mApproachSpeed << " m/s";
     return true;
 }
 

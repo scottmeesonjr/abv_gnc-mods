@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>abv_dock_bridge</name>
+  <version>0.0.0</version>
+  <description>Serial bridge to the docking mechanism Arduino, and the per-cycle docking test logger</description>
+  <maintainer email="scott@todo.todo">scott</maintainer>
+  <license>TODO: License declaration</license>
+
+  <depend>rclpy</depend>
+  <depend>abv_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>ament_index_python</depend>
+  <depend>rcl_interfaces</depend>
+  <exec_depend>python3-serial</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -7,6 +7,7 @@
 #include <QStackedWidget>
 #include <QFrame>
 #include <QSignalBlocker>
+#include <cmath>
 
 #include "abv_common/RosTopicManager.h"
 #include "abv_msgs/msg/abv_controller_command.hpp"
@@ -131,11 +132,39 @@ QWidget* CommandPanel::makePathPanel()
     auto* form   = new QFormLayout();
 
     mPathType = new QComboBox();
-    mPathType->addItems({"File"});
+    mPathType->addItems({"File", "Dock"});
     form->addRow("Path Type:", mPathType);
 
-    mPathDuration = makeSpinBox(0, 1000.0, 1);
+    // -1 = no overall time limit (guidance skips its path watchdog). The old
+    // default of 0-1 s ended paths almost immediately.
+    mPathDuration = makeSpinBox(-1.0, 3600.0, 10);
+    mPathDuration->setDecimals(0);
+    mPathDuration->setSpecialValueText("No limit");
+    mPathDuration->setValue(-1.0);
     form->addRow("Duration (s):", mPathDuration); 
+
+    // Dock run test settings
+    mDockOptions = new QWidget();
+    auto* dockForm = new QFormLayout(mDockOptions);
+    dockForm->setContentsMargins(0, 0, 0, 0);
+
+    mDockRadial = makeSpinBox(-0.20, 0.20, 0.01);
+    mDockRadial->setToolTip("Sideways offset across the docking axis (SYS.07 limit: 0.10 m)");
+    dockForm->addRow("Radial (m):", mDockRadial);
+
+    mDockAngleDeg = makeSpinBox(-10.0, 10.0, 0.5);
+    mDockAngleDeg->setDecimals(1);
+    mDockAngleDeg->setToolTip("Heading offset from aligned (SYS.08 limit: 4 deg)");
+    dockForm->addRow("Angle (deg):", mDockAngleDeg);
+
+    mDockSpeed = makeSpinBox(0.0, 0.15, 0.005);
+    mDockSpeed->setSpecialValueText("Config");
+    mDockSpeed->setToolTip("Approach speed; SYS.10 band is 0.05-0.10 m/s. 'Config' uses Docking.ApproachVelocity");
+    dockForm->addRow("Speed (m/s):", mDockSpeed);
+
+    mDockOptions->setVisible(false);
+    connect(mPathType, &QComboBox::currentTextChanged, this,
+            [this](const QString& aType) { mDockOptions->setVisible(aType == "Dock"); });
 
     auto* sendBtn = new ButtonAdapter("Send Path", 
             std::bind(&CommandPanel::onSendPath, this), 
@@ -143,6 +172,7 @@ QWidget* CommandPanel::makePathPanel()
     sendBtn->button()->setMinimumHeight(50); 
 
     layout->addLayout(form);
+    layout->addWidget(mDockOptions);
     layout->addWidget(sendBtn);
     layout->addStretch(); 
     return panel;
@@ -393,6 +423,18 @@ void CommandPanel::onSendPath()
     abv_msgs::msg::AbvGuidanceCommand cmd; 
     cmd.set__type(mPathType->currentText().toStdString()); 
     cmd.set__duration(mPathDuration->value()); 
+
+    if (mPathType->currentText() == "Dock")
+    {
+        abv_msgs::msg::AbvVec3 goal;
+        goal.set__x(mDockRadial->value());
+        goal.set__y(mDockSpeed->value());  // 0 = use config
+        goal.set__yaw(mDockAngleDeg->value() * M_PI / 180.0);
+
+        abv_msgs::msg::AbvState goalState;
+        goalState.set__position(goal);
+        cmd.set__goal_state(goalState);
+    }
 
     RosTopicManager::getInstance()->publishMessage("abv/guidance/command", cmd); 
 }
