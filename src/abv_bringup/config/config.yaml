@@ -28,7 +28,7 @@ Navigation:
 Docking:
   TargetPose: [3.4, 0.9, 3.14159] # SIM PLACEHOLDER: passive face center x, y (m), outward normal yaw (rad). Replace with surveyed values.
   PortOffset: 0.30 # TBD: measure, ABV rigid-body origin to active face (m)
-  StandoffDistance: 1.0 # TEMPORARY for alert test; normal 0.50
+  StandoffDistance: 0.50 # FOR ALERT TEST: Set to 0.10
   ApproachVelocity: 0.075 # m/s, SYS.10 band 0.05-0.10
   ApproachTimeout: 30.0 # s
   CaptureRange: 0.01 # m, stop if gap below this and no lock
