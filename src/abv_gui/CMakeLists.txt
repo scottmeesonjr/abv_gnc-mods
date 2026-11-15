@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Charts)
 find_package(rclcpp REQUIRED)
 find_package(abv_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(abv_common REQUIRED)
 
 set(CMAKE_AUTOMOC ON)
@@ -60,6 +61,7 @@ target_link_libraries(abv_gui
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   abv_msgs
+  std_msgs
   abv_common
 )
 

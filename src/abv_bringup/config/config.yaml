@@ -66,7 +66,7 @@ ControlLaw:
   Law: PID # which IControlLaw abv_control instantiates: PID today, room for LQR | MPC later
 
   Pid: # pose goals
-    Kp: [25.0, 25.0, 5.0]
+    Kp: [25.0, 25.0, 15.0]
     Ki: [0, 0, 0]
     Kd: [155.0, 155.0, 15.0]
 

@@ -20,6 +20,10 @@ public slots:
     void onDockStatus(const QVariant& aData);
     // QVector<double>{speed, closing_velocity, range, alert}
     void onNavAlert(const QVariant& aData);
+    // QString from abv/dock/event, e.g. "CYCLE|2|CAPTURED|0.0510",
+    // "COMPLETE|10|10" or "ABORTED|<reason>". COMPLETE / ABORTED pop up a
+    // (non-blocking) message box; CYCLE updates the "Last cycle" row.
+    void onDockEvent(const QVariant& aData);
 
 private:
     void checkStale();
@@ -27,6 +31,7 @@ private:
     QLabel* mMechanism{nullptr};
     QLabel* mCycles{nullptr};
     QLabel* mApproach{nullptr};
+    QLabel* mLastCycle{nullptr};
     QLabel* mAlert{nullptr};
 
     QElapsedTimer mLastStatus;

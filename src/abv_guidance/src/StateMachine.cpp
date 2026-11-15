@@ -1,3 +1,4 @@
+#include <algorithm>
 
 #include <cmath>
 #include <iostream>
@@ -7,6 +8,7 @@
 #include "abv_msgs/msg/abv_guidance_status.hpp"
 #include "abv_msgs/msg/abv_path.hpp"
 #include "abv_msgs/msg/dock_command.hpp"
+#include "std_msgs/msg/string.hpp"
 
 #include "abv_common/RateController.hpp"
 #include "abv_common/ConfigurationManager.h"
@@ -26,6 +28,7 @@ StateMachine::StateMachine() :
     mDockingConfig = ConfigurationManager::getInstance()->getDockingConfig();
 
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::DockCommand>("abv/dock/cmd");
+    RosTopicManager::getInstance()->createPublisher<std_msgs::msg::String>("abv/dock/event");
     RosTopicManager::getInstance()->createSubscriber<abv_msgs::msg::DockStatus>("abv/dock/status",
             std::bind(&StateMachine::dockStatusCallback, this, std::placeholders::_1));
 
@@ -141,7 +144,13 @@ void StateMachine::generatePath()
     {
         // goal x = radial offset (m), goal y = approach speed (m/s, 0 = config),
         // goal yaw = angular offset (rad); see CyclicDockGenerator.h
+        if(mDockRunActive)
+        {
+            endDockRun("replaced by a new dock command");
+        }
         mApproachCount = 0;
+        mCapturedCount = 0;
+        mDockRunActive = true;
         auto pathGen = std::make_unique<CyclicDockGenerator>(mCommand.mGoal.mPose.x(), mCommand.mGoal.mPose.z(),
                                                              mCommand.mGoal.mPose.y(), mScene);
         mPathGenerator = std::move(pathGen);
@@ -199,6 +208,11 @@ void StateMachine::sendWaypoint()
             {
                 LOGW << "Mechanism already reports LOCKED at the start of the approach - check that the last unlock worked";
             }
+        }
+        if(wp.mType == WaypointType::APPROACH)
+        {
+            Eigen::Vector3d p = mNavSource.getCurrentPose();
+            mApproachLateral0 = DockingGeometry::faceLateralOffset(mDockingConfig, p.x(), p.y(), p.z());
         }
         sendVelocityCommand(wp.mVel);
         mStepStart = std::chrono::steady_clock::now();
@@ -279,7 +293,12 @@ void StateMachine::waitForArrival()
     // timed / docking steps finish on their own conditions, not controller ARRIVED
     if(mCurrentWaypoint.mType != WaypointType::POSE)
     {
-        if(isTimedStepComplete())
+        bool complete = isTimedStepComplete();
+        if(!complete && mCurrentWaypoint.mType == WaypointType::APPROACH)
+        {
+            holdApproachLateral();
+        }
+        if(complete)
         {
             if(mCurrentWaypoint.mType != WaypointType::HOLD)
             {
@@ -333,6 +352,10 @@ void StateMachine::onTimeout()
     sendStopCommand();
 
     setActiveState(StateMachine::States::IDLE);
+    if(mDockRunActive)
+    {
+        endDockRun("duration limit reached");
+    }
 }
 
 void StateMachine::sendStopCommand()
@@ -416,6 +439,10 @@ void StateMachine::onWaypointTimeout()
         // drifting at whatever speed it had when the path was abandoned.
         sendVelocityCommand(Eigen::Vector3d::Zero());
         setActiveState(States::IDLE);
+        if(mDockRunActive)
+        {
+            endDockRun("could not reach a waypoint");
+        }
     }
 }
 
@@ -553,12 +580,17 @@ bool StateMachine::isTimedStepComplete()
         {
             LOGI << "Approach " << mApproachCount << " result: CAPTURED after " << elapsed
                  << " s, face gap " << gap << " m, speed at lock " << std::hypot(vel.x(), vel.y()) << " m/s";
+            mCapturedCount++;
+            publishDockEvent("CYCLE|" + std::to_string(mApproachCount) + "|CAPTURED|" +
+                             std::to_string(std::hypot(vel.x(), vel.y())));
             return true;
         }
         if(gap <= kOvertravel_m)
         {
             LOGW << "Approach " << mApproachCount << " result: NO LOCK, overtravel past the target face ("
                  << gap << " m) after " << elapsed << " s";
+            publishDockEvent("CYCLE|" + std::to_string(mApproachCount) + "|OVERTRAVEL|" +
+                             std::to_string(std::hypot(vel.x(), vel.y())));
             return true;
         }
         if(gap <= mDockingConfig.mCaptureRange)
@@ -577,6 +609,8 @@ bool StateMachine::isTimedStepComplete()
             {
                 LOGW << "Approach " << mApproachCount << " result: NO LOCK after " << waited
                      << " s in contact, face gap " << gap << " m";
+                publishDockEvent("CYCLE|" + std::to_string(mApproachCount) + "|NO LOCK|" +
+                                 std::to_string(std::hypot(vel.x(), vel.y())));
                 return true;
             }
             return false;
@@ -585,6 +619,8 @@ bool StateMachine::isTimedStepComplete()
         {
             LOGW << "Approach " << mApproachCount << " result: TIMED OUT after " << elapsed
                  << " s, face gap " << gap << " m";
+            publishDockEvent("CYCLE|" + std::to_string(mApproachCount) + "|TIMED OUT|" +
+                             std::to_string(std::hypot(vel.x(), vel.y())));
             return true;
         }
         return false;
@@ -604,7 +640,52 @@ void StateMachine::finishStep()
     {
         mWatchdog.cancel();
         setActiveState(States::IDLE);
+        if(mDockRunActive)
+        {
+            endDockRun("");
+        }
     }
+}
+
+void StateMachine::endDockRun(const std::string& aAbortReason)
+{
+    if(aAbortReason.empty())
+    {
+        LOGI << "Docking run complete: " << mCapturedCount << " of " << mApproachCount << " captured";
+        publishDockEvent("COMPLETE|" + std::to_string(mCapturedCount) + "|" + std::to_string(mApproachCount));
+    }
+    else
+    {
+        LOGW << "Docking run aborted: " << aAbortReason;
+        publishDockEvent("ABORTED|" + aAbortReason);
+    }
+    mDockRunActive = false;
+}
+
+void StateMachine::publishDockEvent(const std::string& aEvent)
+{
+    std_msgs::msg::String msg;
+    msg.data = aEvent;
+    RosTopicManager::getInstance()->publishMessage<std_msgs::msg::String>("abv/dock/event", msg);
+}
+
+void StateMachine::holdApproachLateral()
+{
+    // 1/s, sideways velocity per meter of drift from the starting offset
+    constexpr double kLateralGain = 1.0;
+    // m/s, cap on the sideways correction so it never dominates the approach
+    constexpr double kMaxLateralCorrection = 0.02;
+
+    Eigen::Vector3d p = mNavSource.getCurrentPose();
+    double lateral = DockingGeometry::faceLateralOffset(mDockingConfig, p.x(), p.y(), p.z());
+    double correction = std::clamp(kLateralGain * (mApproachLateral0 - lateral),
+                                   -kMaxLateralCorrection, kMaxLateralCorrection);
+
+    const double psi = mDockingConfig.mTargetPose[2];
+    Eigen::Vector3d vel = mCurrentWaypoint.mVel;
+    vel.x() += -std::sin(psi) * correction;
+    vel.y() +=  std::cos(psi) * correction;
+    sendVelocityCommand(vel);
 }
 
 void StateMachine::dockStatusCallback(abv_msgs::msg::DockStatus::SharedPtr aStatus)

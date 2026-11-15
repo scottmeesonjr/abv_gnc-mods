@@ -4,6 +4,7 @@ project(abv_guidance)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(abv_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(abv_common REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(plog REQUIRED)
@@ -34,6 +35,7 @@ target_link_libraries(${PROJECT_NAME} abv_common::abv_common yaml-cpp plog::plog
 ament_target_dependencies(${PROJECT_NAME}
     rclcpp
     abv_msgs
+    std_msgs
     Eigen3
 )
 

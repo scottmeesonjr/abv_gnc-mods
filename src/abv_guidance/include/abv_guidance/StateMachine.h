@@ -89,6 +89,15 @@ private:
     bool mReachedCaptureRange = false;
     std::chrono::steady_clock::time_point mCaptureRangeReachedAt;
 
+    // approach: face lateral offset when the approach started. Held for the
+    // whole approach so the commanded test offset is what the mechanism sees
+    // at contact (it is preserved, never corrected toward the axis).
+    double mApproachLateral0 = 0.0;
+
+    // dock run bookkeeping for the abv/dock/event messages (GUI pop-up)
+    bool mDockRunActive = false;
+    int mCapturedCount = 0;
+
 private: 
     void startup(); 
     void generatePath(); 
@@ -108,6 +117,13 @@ private:
     void finishStep();
     double stepElapsed_s() const;
     void dockStatusCallback(abv_msgs::msg::DockStatus::SharedPtr aStatus);
+    void holdApproachLateral();
+    // abv/dock/event (std_msgs/String), '|' separated:
+    //   CYCLE|<n>|<CAPTURED / NO LOCK / TIMED OUT / OVERTRAVEL>|<speed m/s>
+    //   COMPLETE|<captured>|<attempted>
+    //   ABORTED|<reason>
+    void publishDockEvent(const std::string& aEvent);
+    void endDockRun(const std::string& aAbortReason);
 
     // per-axis: aWaypoint's override if > 0, else mCommand.mArrivalTol
     // (which itself falls back to the configured default in

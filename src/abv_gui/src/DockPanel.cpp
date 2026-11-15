@@ -1,6 +1,8 @@
 #include "abv_gui/DockPanel.h"
 
 #include <QFormLayout>
+#include <QMessageBox>
+#include <QStringList>
 #include <QFrame>
 #include <QVBoxLayout>
 #include <QVector>
@@ -70,6 +72,7 @@ DockPanel::DockPanel(QWidget* parent) : QWidget(parent)
     mMechanism = makeValueLabel();
     mCycles = makeValueLabel();
     mApproach = makeValueLabel();
+    mLastCycle = makeValueLabel();
 
     auto addRow = [form](const QString& aName, QLabel* aValue) {
         auto* name = new QLabel(aName);
@@ -79,6 +82,7 @@ DockPanel::DockPanel(QWidget* parent) : QWidget(parent)
     addRow("Mechanism:", mMechanism);
     addRow("Cycles:", mCycles);
     addRow("Closing / gap:", mApproach);
+    addRow("Last cycle:", mLastCycle);
     layout->addLayout(form);
 
     mAlert = new QLabel("Speed: ---");
@@ -165,4 +169,53 @@ void DockPanel::checkStale()
         mMechanism->setText("NO DATA");
         mMechanism->setStyleSheet(valueStyle("#888888"));
     }
+}
+
+void DockPanel::onDockEvent(const QVariant& aData)
+{
+    const QStringList parts = aData.toString().split('|');
+    if (parts.isEmpty())
+    {
+        return;
+    }
+
+    if (parts[0] == "CYCLE" && parts.size() >= 4)
+    {
+        const bool captured = (parts[2] == "CAPTURED");
+        mLastCycle->setText(QString("#%1 %2 %3 m/s")
+                                .arg(parts[1], parts[2])
+                                .arg(parts[3].toDouble(), 0, 'f', 3));
+        mLastCycle->setStyleSheet(valueStyle(captured ? "#66bb6a" : "#ff5252"));
+        return;
+    }
+
+    QString title;
+    QString text;
+    QMessageBox::Icon icon = QMessageBox::Information;
+    if (parts[0] == "COMPLETE" && parts.size() >= 3)
+    {
+        title = "Docking run complete";
+        text = QString("Docking path complete.\n\n%1 of %2 cycles captured.\n\n"
+                       "Results are in ~/abv_dock_logs/.").arg(parts[1], parts[2]);
+        if (parts[1] != parts[2])
+        {
+            icon = QMessageBox::Warning;
+        }
+    }
+    else if (parts[0] == "ABORTED")
+    {
+        title = "Docking run aborted";
+        text = "Docking run aborted: " + parts.mid(1).join('|');
+        icon = QMessageBox::Warning;
+    }
+    else
+    {
+        return;
+    }
+
+    // non-modal so the GUI keeps updating while the box is open
+    auto* box = new QMessageBox(icon, title, text, QMessageBox::Ok, this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setModal(false);
+    box->show();
 }

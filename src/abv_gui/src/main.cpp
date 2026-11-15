@@ -44,6 +44,7 @@
 #include "abv_gui/PolicySelectorPanel.h"
 #include "abv_gui/ActivePolicyBanner.h"
 #include "abv_gui/DockPanel.h"
+#include "std_msgs/msg/string.hpp"
 
 int main(int argc, char *argv[])
 {
@@ -135,6 +136,14 @@ int main(int argc, char *argv[])
             "abv/nav/alert", &conversions::navAlertConvertor);
     QObject::connect(navAlertAdapter, &TopicAdapterBase::newDataVariant,
                       dockPanel, &DockPanel::onNavAlert);
+
+    auto* dockEventAdapter =
+        new TopicAdapter<std_msgs::msg::String, QString>("abv/dock/event",
+            [](const std_msgs::msg::String& msg) {
+                return QString::fromStdString(msg.data);
+            });
+    QObject::connect(dockEventAdapter, &TopicAdapterBase::newDataVariant,
+                      dockPanel, &DockPanel::onDockEvent);
 
     PolicySelectorPanel* policyPanel = new PolicySelectorPanel();
     rightLayout->addWidget(policyPanel);

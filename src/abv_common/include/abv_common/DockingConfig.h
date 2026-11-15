@@ -34,7 +34,7 @@ struct DockingConfig
     // s, time held docked before UNLOCK is sent.
     double mDwellTime = 5.0;
 
-    // Engagement cycles per run (SYS.02).
+    // Engagement cycles per run (SYS.06).
     int mCycles = 20;
 
     // Arduino link (used by abv_dock_bridge).
@@ -99,8 +99,11 @@ namespace DockingGeometry
         return -(aVx * std::cos(psi) + aVy * std::sin(psi));
     }
 
-    // [x, y, yaw] of the ABV center when its face is aGap from the target face,
-    // shifted aRadialOffset (m) along t and rotated aAngularOffset (rad).
+    // [x, y, yaw] of the ABV center when its active face center sits aGap from
+    // the target face along n and aRadialOffset (m) sideways along t, with the
+    // ABV rotated aAngularOffset (rad) from aligned. The offsets are defined at
+    // the docking face (port to port), which is what SYS.07 / SYS.08 specify,
+    // so a rotated vehicle's center is placed to keep the face where intended.
     // aGap = StandoffDistance gives the standoff pose; aGap = 0 gives the contact pose.
     inline std::array<double, 3> chaserPoseAtGap(const DockingConfig& aCfg, double aGap,
                                                  double aRadialOffset = 0.0,
@@ -109,10 +112,12 @@ namespace DockingGeometry
         const double psi = aCfg.mTargetPose[2];
         const double nx = std::cos(psi), ny = std::sin(psi);
         const double tx = -ny, ty = nx;
-        const double along = aGap + aCfg.mPortOffset;
-        return {aCfg.mTargetPose[0] + nx * along + tx * aRadialOffset,
-                aCfg.mTargetPose[1] + ny * along + ty * aRadialOffset,
-                wrapAngle(psi + M_PI + aAngularOffset)};
+        const double yaw = wrapAngle(psi + M_PI + aAngularOffset);
+        const double faceX = aCfg.mTargetPose[0] + nx * aGap + tx * aRadialOffset;
+        const double faceY = aCfg.mTargetPose[1] + ny * aGap + ty * aRadialOffset;
+        return {faceX - aCfg.mPortOffset * std::cos(yaw),
+                faceY - aCfg.mPortOffset * std::sin(yaw),
+                yaw};
     }
 
     // [vx, vy] in the table frame for a pure axial approach at aSpeed (m/s).
