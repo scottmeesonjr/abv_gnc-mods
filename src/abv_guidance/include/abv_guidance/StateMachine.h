@@ -94,6 +94,12 @@ private:
     // at contact (it is preserved, never corrected toward the axis).
     double mApproachLateral0 = 0.0;
 
+    // rad, yaw the approach holds: aligned + the dock run's commanded angular
+    // offset. Without this, any yaw rate left over from the standoff move
+    // drifts the heading during the approach (velocity mode only damps rate).
+    double mApproachYawTarget = 0.0;
+    double mDockAngularOffset = 0.0;
+
     // dock run bookkeeping for the abv/dock/event messages (GUI pop-up)
     bool mDockRunActive = false;
     int mCapturedCount = 0;
@@ -122,6 +128,7 @@ private:
     //   CYCLE|<n>|<CAPTURED / NO LOCK / TIMED OUT / OVERTRAVEL>|<speed m/s>
     //   COMPLETE|<captured>|<attempted>
     //   ABORTED|<reason>
+    //   STEP|<cycle>|<label>   (STANDOFF, SETTLE, ARM, APPROACH, LOCK, UNLOCK, ...)
     void publishDockEvent(const std::string& aEvent);
     void endDockRun(const std::string& aAbortReason);
 

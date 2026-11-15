@@ -54,6 +54,7 @@ int main(int argc, char *argv[])
     RosTopicManager::getInstance("abv_gui")->spinNode();
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvControllerCommand>("abv/controller/command");
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command");
+    RosTopicManager::getInstance()->createPublisher<std_msgs::msg::String>("abv/test/run_name");
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvObstacleArray>("abv/scene/obstacles");
 
     QApplication app(argc, argv);

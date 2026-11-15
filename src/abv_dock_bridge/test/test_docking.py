@@ -55,3 +55,12 @@ def test_recorder_uses_commanded_settings():
     assert rows[0]['commanded_speed_m_s'] == 0.05
     r.on_dock_run(0.0, 0.0, 0.0)                 # 0 = config speed
     assert r.commanded_speed_m_s == CFG['ApproachVelocity']
+
+
+def test_run_name_column():
+    rows = []
+    r = CycleRecorder(CFG, rows.append)
+    r.run_name = 'radial_0p10'
+    r.on_command(0.0, 1, 'w')
+    r.on_command(5.0, 4, 'w')
+    assert rows[0]['run_name'] == 'radial_0p10'

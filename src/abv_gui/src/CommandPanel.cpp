@@ -12,6 +12,8 @@
 #include "abv_common/RosTopicManager.h"
 #include "abv_msgs/msg/abv_controller_command.hpp"
 #include "abv_msgs/msg/abv_guidance_command.hpp"
+#include "std_msgs/msg/string.hpp"
+#include <QLineEdit>
 
 #include "abv_gui/ButtonAdapter.hpp"
 
@@ -161,6 +163,11 @@ QWidget* CommandPanel::makePathPanel()
     mDockSpeed->setSpecialValueText("Config");
     mDockSpeed->setToolTip("Approach speed; SYS.10 band is 0.05-0.10 m/s. 'Config' uses Docking.ApproachVelocity");
     dockForm->addRow("Speed (m/s):", mDockSpeed);
+
+    mDockRunName = new QLineEdit();
+    mDockRunName->setPlaceholderText("optional, e.g. radial_0p10");
+    mDockRunName->setToolTip("Added to this run's log file name in ~/abv_dock_logs/");
+    dockForm->addRow("Run name:", mDockRunName);
 
     mDockOptions->setVisible(false);
     connect(mPathType, &QComboBox::currentTextChanged, this,
@@ -426,6 +433,11 @@ void CommandPanel::onSendPath()
 
     if (mPathType->currentText() == "Dock")
     {
+        // name first, so the logger has it before the run's first ARM
+        std_msgs::msg::String name;
+        name.data = mDockRunName->text().trimmed().toStdString();
+        RosTopicManager::getInstance()->publishMessage<std_msgs::msg::String>("abv/test/run_name", name);
+
         abv_msgs::msg::AbvVec3 goal;
         goal.set__x(mDockRadial->value());
         goal.set__y(mDockSpeed->value());  // 0 = use config

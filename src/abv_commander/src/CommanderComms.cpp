@@ -22,6 +22,7 @@ bool CommanderComms::start()
     topicManager->createPublisher<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command"); 
     topicManager->createPublisher<abv_msgs::msg::DockCommand>("abv/dock/cmd");
     topicManager->createPublisher<std_msgs::msg::String>("abv/test/condition");
+    topicManager->createPublisher<std_msgs::msg::String>("abv/test/run_name");
     
     topicManager->spinNode(); 
 

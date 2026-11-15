@@ -10,7 +10,7 @@ from collections import deque
 from abv_dock_bridge import docking
 
 CSV_COLUMNS = [
-    'cycle', 'wall_time', 'condition', 'fixture_roll_deg',
+    'run_name', 'cycle', 'wall_time', 'condition', 'fixture_roll_deg',
     'commanded_radial_m', 'commanded_angle_deg', 'commanded_speed_m_s',
     'start_gap_m', 'start_lateral_m', 'start_angle_deg',
     'max_speed_m_s', 'alert_tripped',
@@ -33,6 +33,7 @@ class CycleRecorder:
         self.cycle_number = 0
         self.condition = ''
         self.fixture_roll_deg = 0.0
+        self.run_name = ''
         # test settings of the current dock run (from the guidance command)
         self.commanded_radial_m = 0.0
         self.commanded_angle_deg = 0.0
@@ -87,6 +88,7 @@ class CycleRecorder:
         self.cycle_number += 1
         row = {k: '' for k in CSV_COLUMNS}
         row.update({
+            'run_name': self.run_name,
             'cycle': self.cycle_number,
             'wall_time': wall_time,
             'condition': self.condition,

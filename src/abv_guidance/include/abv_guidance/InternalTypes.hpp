@@ -48,6 +48,10 @@ struct Waypoint
     // DOCK_COMMAND only: abv_msgs/DockCommand code (CMD_ARM, CMD_UNLOCK, ...)
     std::uint8_t mDockCommand;
 
+    // Optional plain-English step name ("APPROACH", "LOCK", ...). When set,
+    // guidance publishes it on abv/dock/event so the GUI can show the step.
+    std::string mLabel;
+
     Waypoint() : mType(WaypointType::POSE), mPose(Eigen::Vector3d::Zero()), mVel(Eigen::Vector3d::Zero()),
                  mTimeout(-1.0), mArrivalTol(-1.0, -1.0, -1.0), mDockCommand(0) {}
     Waypoint(double x, double y, double yaw, const std::string& aType, double aTimeout = -1.0,
@@ -55,6 +59,12 @@ struct Waypoint
         : mType(aType), mPose(Eigen::Vector3d(x, y, yaw)), mVel(Eigen::Vector3d::Zero()),
           mTimeout(aTimeout), mArrivalTol(aArrivalTol), mDockCommand(0)
     {;}
+
+    Waypoint& label(const std::string& aLabel)
+    {
+        mLabel = aLabel;
+        return *this;
+    }
 
     static Waypoint velocity(double aVx, double aVy, double aWz, double aDuration_s)
     {

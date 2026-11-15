@@ -1,5 +1,10 @@
 """Writes one CSV row per docking cycle (TEST.09) to ~/abv_dock_logs/.
 
+One file per dock run: dock_log_<YYYYmmdd_HHMMSS>[_<run name>].csv. The file
+is opened at the run's first ARM. The run name comes from /abv/test/run_name
+(set by the GUI or commander just before the dock command). Cycles armed by
+hand, outside a dock run, go to a dock_log_<stamp>_manual.csv file.
+
 Works the same in sim and on the real vehicle: it only listens to topics.
   /abv/state           start and contact offsets
   /abv/nav/alert       max speed, alert trips, contact speed
@@ -15,6 +20,7 @@ the static roll the passive half is mounted at for SYS.09 runs).
 import csv
 import datetime
 import os
+import re
 
 import rclpy
 from rclpy.node import Node
@@ -35,14 +41,13 @@ class DockLogger(Node):
         # dynamic typing so fixture_roll_deg:=4 (int) works as well as 4.0
         self.declare_parameter('fixture_roll_deg', 0.0, ParameterDescriptor(dynamic_typing=True))
 
-        log_dir = os.path.expanduser(self.get_parameter('log_dir').value)
-        os.makedirs(log_dir, exist_ok=True)
-        stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.path = os.path.join(log_dir, 'dock_log_{}.csv'.format(stamp))
-        self.file = open(self.path, 'w', newline='')
-        self.writer = csv.DictWriter(self.file, fieldnames=CSV_COLUMNS)
-        self.writer.writeheader()
-        self.file.flush()
+        self.log_dir = os.path.expanduser(self.get_parameter('log_dir').value)
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.file = None
+        self.writer = None
+        self.path = None
+        self.pending_name = ''       # from /abv/test/run_name
+        self.new_run_pending = False  # a dock command arrived, file not opened yet
 
         cfg = docking.load_docking_config()
         self.recorder = CycleRecorder(cfg, self.write_row)
@@ -54,8 +59,31 @@ class DockLogger(Node):
         self.create_subscription(DockCommand, 'abv/dock/cmd', self.on_command, 10)
         self.create_subscription(String, 'abv/test/condition', self.on_condition, 10)
         self.create_subscription(AbvGuidanceCommand, 'abv/guidance/command', self.on_guidance_command, 10)
+        self.create_subscription(String, 'abv/test/run_name', self.on_run_name, 10)
 
-        self.get_logger().info('Logging docking cycles to ' + self.path)
+        self.get_logger().info('Docking logs go to ' + self.log_dir + ' (one file per run)')
+
+    @staticmethod
+    def clean_name(name):
+        name = re.sub(r'[^A-Za-z0-9_-]+', '_', name.strip()).strip('_')
+        return name[:60]
+
+    def open_log(self, name):
+        if self.file is not None:
+            self.file.close()
+        stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        suffix = '_' + name if name else ''
+        self.path = os.path.join(self.log_dir, 'dock_log_{}{}.csv'.format(stamp, suffix))
+        self.file = open(self.path, 'w', newline='')
+        self.writer = csv.DictWriter(self.file, fieldnames=CSV_COLUMNS)
+        self.writer.writeheader()
+        self.file.flush()
+        self.recorder.cycle_number = 0
+        self.recorder.run_name = name
+        self.get_logger().info('Logging this run to ' + self.path)
+
+    def on_run_name(self, msg):
+        self.pending_name = self.clean_name(msg.data)
 
     def now(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -70,13 +98,25 @@ class DockLogger(Node):
         self.recorder.on_status(self.now(), msg.locked and msg.link_ok, msg.cycle_count)
 
     def on_command(self, msg):
+        if msg.command == 1:  # ARM opens a cycle
+            if self.new_run_pending:
+                # finish any cycle still open in the old file, then start the new one
+                self.recorder.close('NO LOCK')
+                self.open_log(self.pending_name)
+                self.pending_name = ''
+                self.new_run_pending = False
+            elif self.file is None:
+                self.recorder.close('NO LOCK')
+                self.open_log('manual')
         self.recorder.on_command(self.now(), msg.command, datetime.datetime.now().isoformat(timespec='seconds'))
 
     def on_guidance_command(self, msg):
         if msg.type.lower() != 'dock':
             return
         g = msg.goal_state.position
+        self.recorder.close('NO LOCK')   # a new run ends any open cycle
         self.recorder.on_dock_run(g.x, g.yaw, g.y)
+        self.new_run_pending = True
         self.get_logger().info('Dock run: radial {:.3f} m, angle {:.1f} deg, speed {:.3f} m/s'.format(
             self.recorder.commanded_radial_m, self.recorder.commanded_angle_deg,
             self.recorder.commanded_speed_m_s))
@@ -86,6 +126,8 @@ class DockLogger(Node):
         self.get_logger().info('Test condition set: ' + msg.data)
 
     def write_row(self, row):
+        if self.writer is None:
+            self.open_log('manual')
         clean = {}
         for k in CSV_COLUMNS:
             v = row.get(k, '')
@@ -96,7 +138,8 @@ class DockLogger(Node):
 
     def close(self):
         self.recorder.close('NO LOCK (logger stopped)')
-        self.file.close()
+        if self.file is not None:
+            self.file.close()
 
 
 def main(args=None):

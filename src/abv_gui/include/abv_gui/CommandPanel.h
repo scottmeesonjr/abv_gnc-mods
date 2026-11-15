@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QLineEdit>
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QStackedWidget>
@@ -87,6 +88,7 @@ private:
     QDoubleSpinBox* mDockRadial{nullptr};
     QDoubleSpinBox* mDockAngleDeg{nullptr};
     QDoubleSpinBox* mDockSpeed{nullptr};
+    QLineEdit*      mDockRunName{nullptr};  // names this run's log file in ~/abv_dock_logs/
 
     QCheckBox*      mBodyFrameCheckbox{nullptr};
 

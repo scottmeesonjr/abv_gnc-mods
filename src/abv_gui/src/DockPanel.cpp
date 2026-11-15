@@ -36,7 +36,7 @@ namespace
     {
         switch (aState)
         {
-            case abv_msgs::msg::DockStatus::STATE_IDLE:    return "IDLE";
+            case abv_msgs::msg::DockStatus::STATE_IDLE:    return "UNLOCKED";
             case abv_msgs::msg::DockStatus::STATE_ARMED:   return "ARMED";
             case abv_msgs::msg::DockStatus::STATE_CAPTURE: return "CAPTURE";
             case abv_msgs::msg::DockStatus::STATE_LOCKED:  return "LOCKED";
@@ -73,12 +73,14 @@ DockPanel::DockPanel(QWidget* parent) : QWidget(parent)
     mCycles = makeValueLabel();
     mApproach = makeValueLabel();
     mLastCycle = makeValueLabel();
+    mStep = makeValueLabel();
 
     auto addRow = [form](const QString& aName, QLabel* aValue) {
         auto* name = new QLabel(aName);
         name->setStyleSheet(kFieldStyle);
         form->addRow(name, aValue);
     };
+    addRow("Step:", mStep);
     addRow("Mechanism:", mMechanism);
     addRow("Cycles:", mCycles);
     addRow("Closing / gap:", mApproach);
@@ -179,6 +181,18 @@ void DockPanel::onDockEvent(const QVariant& aData)
         return;
     }
 
+    if (parts[0] == "STEP" && parts.size() >= 3)
+    {
+        // e.g. "Cycle 3: APPROACH"
+        mStep->setText(QString("Cycle %1: %2").arg(parts[1], parts[2]));
+        QString color = "#ffffff";
+        if (parts[2] == "APPROACH")     color = "#ffb300";
+        else if (parts[2] == "LOCK")    color = "#66bb6a";
+        else if (parts[2] == "UNLOCK")  color = "#4fc3f7";
+        mStep->setStyleSheet(valueStyle(color));
+        return;
+    }
+
     if (parts[0] == "CYCLE" && parts.size() >= 4)
     {
         const bool captured = (parts[2] == "CAPTURED");
@@ -195,6 +209,8 @@ void DockPanel::onDockEvent(const QVariant& aData)
     if (parts[0] == "COMPLETE" && parts.size() >= 3)
     {
         title = "Docking run complete";
+        mStep->setText("COMPLETE");
+        mStep->setStyleSheet(valueStyle("#66bb6a"));
         text = QString("Docking path complete.\n\n%1 of %2 cycles captured.\n\n"
                        "Results are in ~/abv_dock_logs/.").arg(parts[1], parts[2]);
         if (parts[1] != parts[2])
@@ -204,6 +220,8 @@ void DockPanel::onDockEvent(const QVariant& aData)
     }
     else if (parts[0] == "ABORTED")
     {
+        mStep->setText("ABORTED");
+        mStep->setStyleSheet(valueStyle("#ff5252"));
         title = "Docking run aborted";
         text = "Docking run aborted: " + parts.mid(1).join('|');
         icon = QMessageBox::Warning;

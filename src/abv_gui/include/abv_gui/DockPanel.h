@@ -32,6 +32,7 @@ private:
     QLabel* mCycles{nullptr};
     QLabel* mApproach{nullptr};
     QLabel* mLastCycle{nullptr};
+    QLabel* mStep{nullptr};
     QLabel* mAlert{nullptr};
 
     QElapsedTimer mLastStatus;

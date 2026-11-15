@@ -61,6 +61,10 @@ void InputHandler::sendDockRun()
     if (!promptNumber("Approach speed (m/s) [config]: ", 0.0, speed)) return;
     if (!promptNumber("Duration (s) [no limit]: ", -1.0, duration)) return;
 
+    std::string runName;
+    std::cout << GREEN << "Run name for the log file [none]: ";
+    std::getline(std::cin, runName);
+
     if (std::abs(radial) > 0.10 || std::abs(angleDeg) > 4.0)
     {
         std::cout << CYAN << "Note: beyond the SYS.07/SYS.08 limits (0.10 m, 4 deg)" << RESET << std::endl;
@@ -79,6 +83,11 @@ void InputHandler::sendDockRun()
 
     abv_msgs::msg::AbvState goalState;
     goalState.set__position(goal);
+
+    // name first, so the logger has it before the run's first ARM
+    std_msgs::msg::String name;
+    name.data = runName;
+    RosTopicManager::getInstance()->publishMessage<std_msgs::msg::String>("abv/test/run_name", name);
 
     abv_msgs::msg::AbvGuidanceCommand cmd;
     cmd.set__type("dock");

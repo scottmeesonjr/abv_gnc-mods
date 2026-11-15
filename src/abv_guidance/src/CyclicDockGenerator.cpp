@@ -87,19 +87,21 @@ bool CyclicDockGenerator::init()
 
     for (int cycle = 0; cycle < mConfig.mCycles; cycle++)
     {
-        mPath.push_back(standoffWp);
-        mPath.push_back(Waypoint::hold(kStandoffSettle_s));
-        mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_ARM));
+        Waypoint toStandoff = standoffWp;
+        mPath.push_back(toStandoff.label(cycle == 0 ? "STANDOFF" : "BACK OFF"));
+        mPath.push_back(Waypoint::hold(kStandoffSettle_s).label("SETTLE"));
+        mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_ARM).label("ARM"));
         mPath.push_back(Waypoint::approach(vel[0], vel[1], mConfig.mApproachTimeout,
-                                           Eigen::Vector3d(contact[0], contact[1], contact[2])));
-        mPath.push_back(Waypoint::hold(mConfig.mDwellTime));
-        mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_UNLOCK));
-        mPath.push_back(Waypoint::hold(kReleaseSettle_s));
+                                           Eigen::Vector3d(contact[0], contact[1], contact[2])).label("APPROACH"));
+        mPath.push_back(Waypoint::hold(mConfig.mDwellTime).label("LOCK"));
+        mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_UNLOCK).label("UNLOCK"));
+        mPath.push_back(Waypoint::hold(kReleaseSettle_s).label("RELEASE"));
     }
 
     // back off clear of the target and leave the mechanism safe
-    mPath.push_back(standoffWp);
-    mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_DISARM));
+    Waypoint finalBackOff = standoffWp;
+    mPath.push_back(finalBackOff.label("BACK OFF"));
+    mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_DISARM).label("DISARM"));
 
     LOGI << "Docking run: " << mConfig.mCycles << " cycles, radial offset " << mRadialOffset
          << " m, angular offset " << mAngularOffset << " rad, standoff ("

@@ -144,13 +144,16 @@ void StateMachine::generatePath()
     {
         // goal x = radial offset (m), goal y = approach speed (m/s, 0 = config),
         // goal yaw = angular offset (rad); see CyclicDockGenerator.h
-        if(mDockRunActive)
+        // Only report "replaced" if a run was really still going. The flag can
+        // be left set by a run that never started (generator init refused it).
+        if(mDockRunActive && getActiveState() != States::IDLE && getActiveState() != States::GENERATE_PATH)
         {
             endDockRun("replaced by a new dock command");
         }
+        mDockRunActive = false;
         mApproachCount = 0;
         mCapturedCount = 0;
-        mDockRunActive = true;
+        mDockAngularOffset = mCommand.mGoal.mPose.z();
         auto pathGen = std::make_unique<CyclicDockGenerator>(mCommand.mGoal.mPose.x(), mCommand.mGoal.mPose.z(),
                                                              mCommand.mGoal.mPose.y(), mScene);
         mPathGenerator = std::move(pathGen);
@@ -166,8 +169,17 @@ void StateMachine::generatePath()
     if(!mPathGenerator->init())
     {
         LOGW << "Failed to initialize path generator..."; 
+        if("dock" == mCommand.mType || "Dock" == mCommand.mType)
+        {
+            publishDockEvent("ABORTED|could not start (check the guidance log for the reason)");
+        }
         setActiveState(States::IDLE); 
         return; 
+    }
+
+    if("dock" == mCommand.mType || "Dock" == mCommand.mType)
+    {
+        mDockRunActive = true;
     }
 
     setActiveState(States::SEND_WAYPOINT); 
@@ -188,6 +200,19 @@ void StateMachine::sendWaypoint()
     // get next waypoint from current IPathGenerator and send via ROS2
     Waypoint wp = mPathGenerator->getNext();
     mCurrentWaypoint = wp;
+
+    if(mDockRunActive && !wp.mLabel.empty())
+    {
+        // Which cycle the step belongs to. Steps leading up to an approach
+        // (standoff, settle, arm, approach) belong to the next cycle; lock,
+        // unlock, release and the final back-off / disarm to the current one.
+        // (mApproachCount is only incremented further down for APPROACH.)
+        const bool leadsToApproach =
+            (wp.mLabel == "STANDOFF" || wp.mLabel == "SETTLE" || wp.mLabel == "ARM" ||
+             wp.mLabel == "APPROACH" || (wp.mLabel == "BACK OFF" && mPathGenerator->hasNext()));
+        int cycle = leadsToApproach ? mApproachCount + 1 : mApproachCount;
+        publishDockEvent("STEP|" + std::to_string(cycle) + "|" + wp.mLabel);
+    }
 
     // Non-pose steps (docking additions). These don't wait on the controller's
     // ARRIVED status; waitForArrival() ends them with isTimedStepComplete().
@@ -213,6 +238,7 @@ void StateMachine::sendWaypoint()
         {
             Eigen::Vector3d p = mNavSource.getCurrentPose();
             mApproachLateral0 = DockingGeometry::faceLateralOffset(mDockingConfig, p.x(), p.y(), p.z());
+            mApproachYawTarget = DockingGeometry::wrapAngle(mDockingConfig.mTargetPose[2] + M_PI + mDockAngularOffset);
         }
         sendVelocityCommand(wp.mVel);
         mStepStart = std::chrono::steady_clock::now();
@@ -681,10 +707,17 @@ void StateMachine::holdApproachLateral()
     double correction = std::clamp(kLateralGain * (mApproachLateral0 - lateral),
                                    -kMaxLateralCorrection, kMaxLateralCorrection);
 
+    // 1/s, yaw rate per radian of heading error; rad/s cap
+    constexpr double kYawGain = 1.0;
+    constexpr double kMaxYawRate = 0.03;
+    double yawError = DockingGeometry::wrapAngle(mApproachYawTarget - p.z());
+    double yawRate = std::clamp(kYawGain * yawError, -kMaxYawRate, kMaxYawRate);
+
     const double psi = mDockingConfig.mTargetPose[2];
     Eigen::Vector3d vel = mCurrentWaypoint.mVel;
     vel.x() += -std::sin(psi) * correction;
     vel.y() +=  std::cos(psi) * correction;
+    vel.z() = yawRate;
     sendVelocityCommand(vel);
 }
 
