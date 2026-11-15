@@ -55,6 +55,7 @@ int main(int argc, char *argv[])
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvControllerCommand>("abv/controller/command");
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command");
     RosTopicManager::getInstance()->createPublisher<std_msgs::msg::String>("abv/test/run_name");
+    RosTopicManager::getInstance()->createPublisher<std_msgs::msg::String>("abv/test/condition");
     RosTopicManager::getInstance()->createPublisher<abv_msgs::msg::AbvObstacleArray>("abv/scene/obstacles");
 
     QApplication app(argc, argv);
@@ -113,8 +114,17 @@ int main(int argc, char *argv[])
     // STOP BUTTON
     auto stopBtn = new ButtonAdapter("Stop", std::bind(&btn::action::stop), ButtonStyle::danger());
     stopBtn->resize(50, 50);
+    stopBtn->setToolTip("Thrusters off and end the path (the vehicle will coast)");
 
-    rightLayout->addWidget(stopBtn);
+    // BRAKE BUTTON: end the path and hold zero velocity
+    auto brakeBtn = new ButtonAdapter("Brake", std::bind(&btn::action::brake), ButtonStyle::warning());
+    brakeBtn->resize(50, 50);
+    brakeBtn->setToolTip("End the path and actively brake to a stop");
+
+    auto* stopRow = new QHBoxLayout();
+    stopRow->addWidget(stopBtn, 2);
+    stopRow->addWidget(brakeBtn, 1);
+    rightLayout->addLayout(stopRow);
 
     CommandPanel* panel = new CommandPanel();
     rightLayout->addWidget(panel);

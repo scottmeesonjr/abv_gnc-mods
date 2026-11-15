@@ -33,6 +33,11 @@ private:
     QLabel* mApproach{nullptr};
     QLabel* mLastCycle{nullptr};
     QLabel* mStep{nullptr};
+    QLabel* mRunCycle{nullptr};
+    QLabel* mCaptured{nullptr};
+
+    int mRunAttempted{0};
+    int mRunCaptured{0};
     QLabel* mAlert{nullptr};
 
     QElapsedTimer mLastStatus;

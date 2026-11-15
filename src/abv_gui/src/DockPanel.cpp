@@ -46,6 +46,14 @@ namespace
         }
     }
 
+    // "APPROACH" -> "Approach", "BACK OFF" -> "Back off"
+    QString niceLabel(const QString& aLabel)
+    {
+        QString s = aLabel.toLower();
+        if (!s.isEmpty()) s[0] = s[0].toUpper();
+        return s;
+    }
+
     // s, mechanism shown as "NO DATA" if no status arrives within this time
     constexpr int kStaleMs = 1000;
 }
@@ -74,15 +82,19 @@ DockPanel::DockPanel(QWidget* parent) : QWidget(parent)
     mApproach = makeValueLabel();
     mLastCycle = makeValueLabel();
     mStep = makeValueLabel();
+    mRunCycle = makeValueLabel();
+    mCaptured = makeValueLabel();
 
     auto addRow = [form](const QString& aName, QLabel* aValue) {
         auto* name = new QLabel(aName);
         name->setStyleSheet(kFieldStyle);
         form->addRow(name, aValue);
     };
+    addRow("Cycle:", mRunCycle);
     addRow("Step:", mStep);
+    addRow("Captured:", mCaptured);
     addRow("Mechanism:", mMechanism);
-    addRow("Cycles:", mCycles);
+    addRow("Mech. total:", mCycles);
     addRow("Closing / gap:", mApproach);
     addRow("Last cycle:", mLastCycle);
     layout->addLayout(form);
@@ -181,14 +193,32 @@ void DockPanel::onDockEvent(const QVariant& aData)
         return;
     }
 
-    if (parts[0] == "STEP" && parts.size() >= 3)
+    if (parts[0] == "STEP" && parts.size() >= 5)
     {
-        // e.g. "Cycle 3: APPROACH"
-        mStep->setText(QString("Cycle %1: %2").arg(parts[1], parts[2]));
+        // STEP|<cycle>|<total>|<step number, 0 = end>|<label>
+        const int cycle = parts[1].toInt();
+        const int total = parts[2].toInt();
+        const int stepNum = parts[3].toInt();
+        const QString label = parts[4];
+
+        if (cycle == 1 && stepNum == 1)
+        {
+            // first step of a new run: reset the run tally
+            mRunAttempted = 0;
+            mRunCaptured = 0;
+            mCaptured->setText("0 of 0");
+            mCaptured->setStyleSheet(valueStyle("#ffffff"));
+            mLastCycle->setText("---");
+            mLastCycle->setStyleSheet(valueStyle("#ffffff"));
+        }
+
+        mRunCycle->setText(QString("%1 of %2").arg(cycle).arg(total));
+        mStep->setText(stepNum > 0 ? QString("%1/7  %2").arg(stepNum).arg(niceLabel(label))
+                                   : QString("%1 (end)").arg(niceLabel(label)));
         QString color = "#ffffff";
-        if (parts[2] == "APPROACH")     color = "#ffb300";
-        else if (parts[2] == "LOCK")    color = "#66bb6a";
-        else if (parts[2] == "UNLOCK")  color = "#4fc3f7";
+        if (label == "APPROACH")     color = "#ffb300";
+        else if (label == "LOCK")    color = "#66bb6a";
+        else if (label == "UNLOCK")  color = "#4fc3f7";
         mStep->setStyleSheet(valueStyle(color));
         return;
     }
@@ -196,6 +226,10 @@ void DockPanel::onDockEvent(const QVariant& aData)
     if (parts[0] == "CYCLE" && parts.size() >= 4)
     {
         const bool captured = (parts[2] == "CAPTURED");
+        mRunAttempted++;
+        if (captured) mRunCaptured++;
+        mCaptured->setText(QString("%1 of %2").arg(mRunCaptured).arg(mRunAttempted));
+        mCaptured->setStyleSheet(valueStyle(mRunCaptured == mRunAttempted ? "#66bb6a" : "#ff5252"));
         mLastCycle->setText(QString("#%1 %2 %3 m/s")
                                 .arg(parts[1], parts[2])
                                 .arg(parts[3].toDouble(), 0, 'f', 3));

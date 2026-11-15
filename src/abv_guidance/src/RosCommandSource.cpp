@@ -30,6 +30,9 @@ void RosCommandSource::commandCallback(abv_msgs::msg::AbvGuidanceCommand::Shared
 {
     abv_msgs::msg::AbvVec3 goal = aCmd->goal_state.position; 
     Waypoint wp(goal.x, goal.y, goal.yaw, "pose");  // TODO: support sending vel commands
+    // carried through for path types that use it ("dock": velocity.x = cycles, 0 = config)
+    abv_msgs::msg::AbvVec3 gv = aCmd->goal_state.velocity;
+    wp.mVel << gv.x, gv.y, gv.yaw;
 
     Command cmd; 
     cmd.mType = aCmd->type; 

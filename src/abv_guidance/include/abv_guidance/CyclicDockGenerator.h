@@ -25,12 +25,14 @@
 //   goal x   = radial offset (m, across the docking axis)        SYS.07 / TEST.04A
 //   goal yaw = angular offset (rad)                               SYS.08 / TEST.04B
 //   goal y   = approach speed (m/s); 0 = Docking.ApproachVelocity  SYS.10 / TEST.04C
+//   goal velocity x = number of cycles; 0 = Docking.Cycles           SYS.06
 // A zero goal gives a nominal (centered, aligned, config-speed) run.
 class CyclicDockGenerator : public IPathGenerator
 {
 public:
     CyclicDockGenerator(double aRadialOffset, double aAngularOffset, double aApproachSpeed,
-                        const Scene& aScene);
+                        int aCycles, const Scene& aScene);
+    int cycles() const { return mCycles; }
     ~CyclicDockGenerator() override;
 
     bool init() override;
@@ -43,6 +45,7 @@ private:
     double mRadialOffset;
     double mAngularOffset;
     double mApproachSpeed;
+    int mCycles;
     const Scene& mScene;
     DockingConfig mConfig;
 

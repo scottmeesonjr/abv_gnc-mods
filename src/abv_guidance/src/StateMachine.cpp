@@ -53,6 +53,26 @@ StateMachine::~StateMachine()
 
 void StateMachine::onCommand(const Command& aCommand)
 {
+    // "stop" / "abort": operator stop (GUI Stop button, commander "stop").
+    // The controller already got STOP; guidance just abandons the path so it
+    // doesn't keep sending waypoints that would restart the vehicle.
+    if("stop" == aCommand.mType || "Stop" == aCommand.mType || "STOP" == aCommand.mType ||
+       "abort" == aCommand.mType)
+    {
+        mWaypointWatchdog.cancel();
+        mWatchdog.cancel();
+        if(getActiveState() != States::STARTUP)
+        {
+            setActiveState(States::IDLE);
+        }
+        if(mDockRunActive)
+        {
+            endDockRun("stopped by operator");
+        }
+        LOGI << "Path stopped by operator";
+        return;
+    }
+
     mCommand = aCommand;
     LOGV << "Recvd command to execute " << mCommand.mType << " path for " << mCommand.mDuration << " seconds!";
     if(States::STARTUP == getActiveState())
@@ -155,7 +175,10 @@ void StateMachine::generatePath()
         mCapturedCount = 0;
         mDockAngularOffset = mCommand.mGoal.mPose.z();
         auto pathGen = std::make_unique<CyclicDockGenerator>(mCommand.mGoal.mPose.x(), mCommand.mGoal.mPose.z(),
-                                                             mCommand.mGoal.mPose.y(), mScene);
+                                                             mCommand.mGoal.mPose.y(),
+                                                             static_cast<int>(std::lround(mCommand.mGoal.mVel.x())),
+                                                             mScene);
+        mDockTotalCycles = pathGen->cycles();
         mPathGenerator = std::move(pathGen);
     }
     else
@@ -207,11 +230,26 @@ void StateMachine::sendWaypoint()
         // (standoff, settle, arm, approach) belong to the next cycle; lock,
         // unlock, release and the final back-off / disarm to the current one.
         // (mApproachCount is only incremented further down for APPROACH.)
-        const bool leadsToApproach =
+        const bool finalStep = !mPathGenerator->hasNext() ||
+                               (wp.mLabel == "BACK OFF" && mApproachCount >= mDockTotalCycles);
+        const bool leadsToApproach = !finalStep &&
             (wp.mLabel == "STANDOFF" || wp.mLabel == "SETTLE" || wp.mLabel == "ARM" ||
-             wp.mLabel == "APPROACH" || (wp.mLabel == "BACK OFF" && mPathGenerator->hasNext()));
-        int cycle = leadsToApproach ? mApproachCount + 1 : mApproachCount;
-        publishDockEvent("STEP|" + std::to_string(cycle) + "|" + wp.mLabel);
+             wp.mLabel == "APPROACH" || wp.mLabel == "BACK OFF");
+        const int cycle = leadsToApproach ? mApproachCount + 1 : mApproachCount;
+
+        int stepNum = 0;
+        if(!finalStep)
+        {
+            if(wp.mLabel == "STANDOFF" || wp.mLabel == "BACK OFF") stepNum = 1;
+            else if(wp.mLabel == "SETTLE")   stepNum = 2;
+            else if(wp.mLabel == "ARM")      stepNum = 3;
+            else if(wp.mLabel == "APPROACH") stepNum = 4;
+            else if(wp.mLabel == "LOCK")     stepNum = 5;
+            else if(wp.mLabel == "UNLOCK")   stepNum = 6;
+            else if(wp.mLabel == "RELEASE")  stepNum = 7;
+        }
+        publishDockEvent("STEP|" + std::to_string(cycle) + "|" + std::to_string(mDockTotalCycles) + "|" +
+                         std::to_string(stepNum) + "|" + wp.mLabel);
     }
 
     // Non-pose steps (docking additions). These don't wait on the controller's

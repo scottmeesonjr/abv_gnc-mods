@@ -55,11 +55,16 @@ bool InputHandler::promptNumber(const std::string& aPrompt, double aDefault, dou
 
 void InputHandler::sendDockRun()
 {
-    double radial = 0.0, angleDeg = 0.0, speed = 0.0, duration = -1.0;
+    double radial = 0.0, angleDeg = 0.0, speed = 0.0, cycles = 0.0;
     if (!promptNumber("Radial offset (m) [0]: ", 0.0, radial)) return;
     if (!promptNumber("Angular offset (deg) [0]: ", 0.0, angleDeg)) return;
     if (!promptNumber("Approach speed (m/s) [config]: ", 0.0, speed)) return;
-    if (!promptNumber("Duration (s) [no limit]: ", -1.0, duration)) return;
+    if (!promptNumber("Cycles [config]: ", 0.0, cycles)) return;
+    if (cycles < 0.0 || cycles > 50.0 || cycles != std::floor(cycles))
+    {
+        std::cout << RED << "Cycles must be a whole number from 1 to 50 (blank = config)" << RESET << std::endl;
+        return;
+    }
 
     std::string runName;
     std::cout << GREEN << "Run name for the log file [none]: ";
@@ -81,8 +86,12 @@ void InputHandler::sendDockRun()
     goal.set__y(speed);
     goal.set__yaw(angleDeg * M_PI / 180.0);
 
+    abv_msgs::msg::AbvVec3 extra;
+    extra.set__x(cycles);   // goal velocity x = cycles, 0 = config
+
     abv_msgs::msg::AbvState goalState;
     goalState.set__position(goal);
+    goalState.set__velocity(extra);
 
     // name first, so the logger has it before the run's first ARM
     std_msgs::msg::String name;
@@ -91,12 +100,13 @@ void InputHandler::sendDockRun()
 
     abv_msgs::msg::AbvGuidanceCommand cmd;
     cmd.set__type("dock");
-    cmd.set__duration(duration);
+    cmd.set__duration(-1.0);   // dock runs: each step has its own time limit
     cmd.set__goal_state(goalState);
 
     RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command", cmd);
     std::cout << "Sent dock run: radial " << radial << " m, angular " << angleDeg << " deg, speed "
-              << (speed == 0.0 ? std::string("config") : std::to_string(speed) + " m/s") << std::endl;
+              << (speed == 0.0 ? std::string("config") : std::to_string(speed) + " m/s") << ", cycles "
+              << (cycles == 0.0 ? std::string("config") : std::to_string(static_cast<int>(cycles))) << std::endl;
 }
 
 void InputHandler::sendDockCommand(std::uint8_t aCode, const std::string& aName)
@@ -186,6 +196,23 @@ void InputHandler::handle(const std::string& anInput)
         cmd.set__type("STOP");
         
         RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvControllerCommand>("abv/controller/command", cmd); 
+
+        // also end any path guidance is running
+        abv_msgs::msg::AbvGuidanceCommand gcmd;
+        gcmd.set__type("stop");
+        RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command", gcmd);
+    }
+    else if ("brake" == anInput)
+    {
+        abv_msgs::msg::AbvGuidanceCommand gcmd;
+        gcmd.set__type("stop");
+        RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvGuidanceCommand>("abv/guidance/command", gcmd);
+
+        abv_msgs::msg::AbvControllerCommand cmd;
+        cmd.set__type("velocity");
+        cmd.set__is_global(true);
+        RosTopicManager::getInstance()->publishMessage<abv_msgs::msg::AbvControllerCommand>("abv/controller/command", cmd);
+        std::cout << "Braking to a stop" << std::endl;
     }
     else if ("path" == anInput)
     {
@@ -239,9 +266,10 @@ void InputHandler::handle(const std::string& anInput)
         
         pose:       command the abv to a desired x, y, yaw pose 
         vel:        command the abv to a desired x, y, yaw velocity 
-        stop:       switch the thrusters off (the vehicle will coast)
+        stop:       end the path and switch the thrusters off (the vehicle will coast)
+        brake:      end the path and actively brake to a stop
         path:       command the abv to follow a path sent by the guidance node 
-        dock:       start a docking run (asks for offsets, approach speed, duration)
+        dock:       start a docking run (asks for offsets, approach speed, cycles, run name)
         condition:  set a test-condition note for the docking log
         arm, disarm, lock, unlock:
                     send a command straight to the docking mechanism

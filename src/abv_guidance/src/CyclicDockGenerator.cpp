@@ -26,11 +26,12 @@ namespace
 }
 
 CyclicDockGenerator::CyclicDockGenerator(double aRadialOffset, double aAngularOffset, double aApproachSpeed,
-                                         const Scene& aScene) :
+                                         int aCycles, const Scene& aScene) :
     mRadialOffset(aRadialOffset), mAngularOffset(aAngularOffset), mScene(aScene), mIndex(0)
 {
     mConfig = ConfigurationManager::getInstance()->getDockingConfig();
     mApproachSpeed = (aApproachSpeed > 0.0) ? aApproachSpeed : mConfig.mApproachVelocity;
+    mCycles = (aCycles > 0) ? aCycles : mConfig.mCycles;
 }
 
 CyclicDockGenerator::~CyclicDockGenerator()
@@ -57,9 +58,9 @@ bool CyclicDockGenerator::init()
         LOGW << "Approach speed " << mApproachSpeed << " m/s is outside the SYS.10 band (0.05-0.10 m/s)";
     }
 
-    if (mConfig.mCycles < 1)
+    if (mCycles < 1)
     {
-        LOGW << "Docking.Cycles is " << mConfig.mCycles << ", nothing to run";
+        LOGW << "Cycle count is " << mCycles << ", nothing to run";
         return false;
     }
 
@@ -85,7 +86,7 @@ bool CyclicDockGenerator::init()
     Eigen::Vector3d startTol(mConfig.mStartTolerance[0], mConfig.mStartTolerance[1], mConfig.mStartTolerance[2]);
     Waypoint standoffWp(standoff[0], standoff[1], standoff[2], WaypointType::POSE, kStandoffTimeout_s, startTol);
 
-    for (int cycle = 0; cycle < mConfig.mCycles; cycle++)
+    for (int cycle = 0; cycle < mCycles; cycle++)
     {
         Waypoint toStandoff = standoffWp;
         mPath.push_back(toStandoff.label(cycle == 0 ? "STANDOFF" : "BACK OFF"));
@@ -103,7 +104,7 @@ bool CyclicDockGenerator::init()
     mPath.push_back(finalBackOff.label("BACK OFF"));
     mPath.push_back(Waypoint::dockCommand(abv_msgs::msg::DockCommand::CMD_DISARM).label("DISARM"));
 
-    LOGI << "Docking run: " << mConfig.mCycles << " cycles, radial offset " << mRadialOffset
+    LOGI << "Docking run: " << mCycles << " cycles, radial offset " << mRadialOffset
          << " m, angular offset " << mAngularOffset << " rad, standoff ("
          << standoff[0] << ", " << standoff[1] << ", " << standoff[2] << "), approach "
          << mApproachSpeed << " m/s";

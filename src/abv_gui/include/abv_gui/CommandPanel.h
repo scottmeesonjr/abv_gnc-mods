@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QLineEdit>
+#include <QSpinBox>
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QStackedWidget>
@@ -89,6 +90,8 @@ private:
     QDoubleSpinBox* mDockAngleDeg{nullptr};
     QDoubleSpinBox* mDockSpeed{nullptr};
     QLineEdit*      mDockRunName{nullptr};  // names this run's log file in ~/abv_dock_logs/
+    QSpinBox*       mDockCycles{nullptr};   // 0 = Docking.Cycles from config.yaml
+    QLineEdit*      mDockCondition{nullptr};// free-text note copied into every log row
 
     QCheckBox*      mBodyFrameCheckbox{nullptr};
 

@@ -103,6 +103,7 @@ private:
     // dock run bookkeeping for the abv/dock/event messages (GUI pop-up)
     bool mDockRunActive = false;
     int mCapturedCount = 0;
+    int mDockTotalCycles = 0;
 
 private: 
     void startup(); 
@@ -128,7 +129,9 @@ private:
     //   CYCLE|<n>|<CAPTURED / NO LOCK / TIMED OUT / OVERTRAVEL>|<speed m/s>
     //   COMPLETE|<captured>|<attempted>
     //   ABORTED|<reason>
-    //   STEP|<cycle>|<label>   (STANDOFF, SETTLE, ARM, APPROACH, LOCK, UNLOCK, ...)
+    //   STEP|<cycle>|<total cycles>|<step number, 0 = end of run>|<label>
+    //        labels: STANDOFF / BACK OFF (1), SETTLE (2), ARM (3), APPROACH (4),
+    //                LOCK (5), UNLOCK (6), RELEASE (7); final BACK OFF / DISARM (0)
     void publishDockEvent(const std::string& aEvent);
     void endDockRun(const std::string& aAbortReason);
 

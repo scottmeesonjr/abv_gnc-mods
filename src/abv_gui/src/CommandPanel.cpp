@@ -14,6 +14,7 @@
 #include "abv_msgs/msg/abv_guidance_command.hpp"
 #include "std_msgs/msg/string.hpp"
 #include <QLineEdit>
+#include <QSpinBox>
 
 #include "abv_gui/ButtonAdapter.hpp"
 
@@ -164,14 +165,35 @@ QWidget* CommandPanel::makePathPanel()
     mDockSpeed->setToolTip("Approach speed; SYS.10 band is 0.05-0.10 m/s. 'Config' uses Docking.ApproachVelocity");
     dockForm->addRow("Speed (m/s):", mDockSpeed);
 
+    mDockCycles = new QSpinBox();
+    mDockCycles->setRange(0, 50);
+    mDockCycles->setValue(0);
+    mDockCycles->setSpecialValueText("Config");
+    mDockCycles->setToolTip("Cycles in this run (SYS.06: 10). 'Config' uses Docking.Cycles");
+    dockForm->addRow("Cycles:", mDockCycles);
+
     mDockRunName = new QLineEdit();
     mDockRunName->setPlaceholderText("optional, e.g. radial_0p10");
     mDockRunName->setToolTip("Added to this run's log file name in ~/abv_dock_logs/");
     dockForm->addRow("Run name:", mDockRunName);
 
+    mDockCondition = new QLineEdit();
+    mDockCondition->setPlaceholderText("optional note, e.g. fixture roll 4 deg");
+    mDockCondition->setToolTip("Copied into the 'condition' column of every log row");
+    dockForm->addRow("Note:", mDockCondition);
+
     mDockOptions->setVisible(false);
+    // Dock runs don't use Duration: every step has its own time limit
+    // (standoff 120 s, approach Docking.ApproachTimeout, fixed holds), so a
+    // run can't hang. Duration stays for File paths.
     connect(mPathType, &QComboBox::currentTextChanged, this,
-            [this](const QString& aType) { mDockOptions->setVisible(aType == "Dock"); });
+            [this](const QString& aType) {
+                const bool dock = (aType == "Dock");
+                mDockOptions->setVisible(dock);
+                mPathDuration->setEnabled(!dock);
+                mPathDuration->setToolTip(dock ? "Not used for Dock runs: each step has its own time limit"
+                                               : "Overall time limit for the path");
+            });
 
     auto* sendBtn = new ButtonAdapter("Send Path", 
             std::bind(&CommandPanel::onSendPath, this), 
@@ -438,13 +460,23 @@ void CommandPanel::onSendPath()
         name.data = mDockRunName->text().trimmed().toStdString();
         RosTopicManager::getInstance()->publishMessage<std_msgs::msg::String>("abv/test/run_name", name);
 
+        std_msgs::msg::String note;
+        note.data = mDockCondition->text().trimmed().toStdString();
+        RosTopicManager::getInstance()->publishMessage<std_msgs::msg::String>("abv/test/condition", note);
+
+        cmd.set__duration(-1.0);
+
         abv_msgs::msg::AbvVec3 goal;
         goal.set__x(mDockRadial->value());
         goal.set__y(mDockSpeed->value());  // 0 = use config
         goal.set__yaw(mDockAngleDeg->value() * M_PI / 180.0);
 
+        abv_msgs::msg::AbvVec3 extra;
+        extra.set__x(static_cast<double>(mDockCycles->value()));  // cycles, 0 = config
+
         abv_msgs::msg::AbvState goalState;
         goalState.set__position(goal);
+        goalState.set__velocity(extra);
         cmd.set__goal_state(goalState);
     }
 
