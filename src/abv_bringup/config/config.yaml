@@ -34,7 +34,7 @@ Docking:
   CaptureRange: 0.01 # m, stop if gap below this and no lock
   StartTolerance: [0.015, 0.015, 0.017] # m, m, rad (TEST.10/11)
   DwellTime: 5.0 # s docked before UNLOCK
-  Cycles: 2 # SYS.02 target is 20; 2 keeps sim tests short. Real tests: ~3 per nitrogen tank
+  Cycles: 10 # SYS.06: 10 engagement cycles. Use 2 for quick sim checks
   SerialPort: /dev/ttyACM0
   BaudRate: 115200
   StatusTimeout: 0.5 # s
