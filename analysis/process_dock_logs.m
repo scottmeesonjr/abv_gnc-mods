@@ -118,7 +118,7 @@ check(end+1, :) = {'TEST.12', sprintf('contact speed within %.3f m/s of command'
 C = cell2table(check, 'VariableNames', {'Requirement', 'Check', 'Pass', 'Evidence'});
 fprintf('\n===== Requirement checks =====\n');
 for i = 1:height(C)
-    fprintf('%-8s %-4s %-52s %s\n', C.Requirement{i}, passText(C.Pass{i}), C.Check{i}, C.Evidence{i});
+    fprintf('%-8s %-4s %-52s %s\n', C.Requirement{i}, passText(C.Pass(i)), C.Check{i}, C.Evidence{i});
 end
 fprintf('\n');
 
@@ -141,10 +141,16 @@ xlabel('Contact speed (m/s)'); ylabel('Cycles'); title('Contact speed (SYS.10)')
 
 figure('Name', 'Start offset error');
 hold on; grid on;
-plot(T.startRadialErr*1000, T.startAngleErr, 'o');
-xline(REQ.tolRadial*1000, 'k--', 'TEST.10'); yline(REQ.tolAngle, 'k--', 'TEST.11');
+for i = 1:numel(runs)
+    r = T(T.run_name == runs(i), :);
+    plot(r.startRadialErr*1000, r.startAngleErr, 'o', 'MarkerFaceColor', 'auto', ...
+        'DisplayName', char(runs(i)));
+end
+xline(REQ.tolRadial*1000, 'k--', 'TEST.10', 'HandleVisibility', 'off');
+yline(REQ.tolAngle, 'k--', 'TEST.11', 'HandleVisibility', 'off');
 xlabel('|Start radial error| (mm)'); ylabel('|Start angle error| (deg)');
 title('How closely the commanded offsets were set up');
+legend('Interpreter', 'none', 'Location', 'best');
 
 results.cycles = T;
 results.runs = S;
